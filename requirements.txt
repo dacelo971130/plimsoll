@@ -1,0 +1,17 @@
+# Plimsoll backend — runtime
+fastapi>=0.128
+uvicorn[standard]>=0.34
+pydantic>=2.9
+python-multipart>=0.0.9   # multipart/form-data uploads (POST /api/sessions)
+pymupdf>=1.24             # PDF text extraction (backend/services/extraction.py); AGPL — demo/non-closed-source use only, see architecture-decisions-A-B.md §27(b)
+python-docx>=1.1          # DOCX report export (backend/services/export.py, P4)
+reportlab>=4.2            # PDF report export (backend/services/export.py, P4) + demo-data generation (scripts/generate_demo_pdfs.py)
+anthropic>=1.0            # W7 LLM semantic layer (backend/services/llm/) — optional at runtime, see get_llm_provider()
+google-genai>=2.0         # P5 multi-provider: Gemini (backend/services/llm/gemini_provider.py) — optional at runtime
+openai>=1.0               # P5 multi-provider: ChatGPT (backend/services/llm/openai_provider.py) — optional at runtime
+numpy>=1.26               # P5 engineering-drawing pixel diff (backend/services/drawing_diff.py)
+scipy>=1.13               # P5 connected-component region extraction (scipy.ndimage.label)
+
+# Dev / test
+pytest>=8.0
+httpx>=0.27

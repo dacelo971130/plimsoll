@@ -1,0 +1,6 @@
+[
+  { "code": "DPA",       "label_zh": "DPA（Designated Person Ashore）", "label_en": "Designated Person Ashore", "is_active": true, "sort_order": 10, "is_system_seed": true },
+  { "code": "TECH_SUPT", "label_zh": "船舶技術監督",                     "label_en": "Technical Superintendent",   "is_active": true, "sort_order": 20, "is_system_seed": true },
+  { "code": "FLEET_MGR", "label_zh": "船隊經理",                         "label_en": "Fleet Manager",              "is_active": true, "sort_order": 30, "is_system_seed": true },
+  { "code": "OTHER",     "label_zh": "其他",                             "label_en": "Other",                      "is_active": true, "sort_order": 99, "is_system_seed": true }
+]

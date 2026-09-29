@@ -1,0 +1,36 @@
+/.idea/
+.idea
+.env
+.venv/
+__pycache__/
+*.py[cod]
+.streamlit/secrets.toml
+output/
+tmp/
+
+
+# Local-first runtime data (architecture-decisions-A-B.md §19) — the JSONL
+# audit trail and session blobs are per-user local state, not source.
+# `data/store/config/**` (approval roles / rulesets / policies) IS tracked —
+# those are versioned seed config, not runtime data.
+/data/store/sessions/
+/data/store/exports/
+/data/store/.integrity/
+/docs/
+
+# Real third-party documents pulled in for smoke-testing the comparison
+# engine against non-synthetic input (docs/redesign/plimsoll-real-document-
+# smoketest-2026-09.html §8) — ABS/EASA copies carry their own "all rights
+# reserved" / "proprietary document" notices, so these stay local-only.
+/data/external-samples/
+
+.pytest_cache/
+
+.DS_Store
+
+# Build output — produced locally by `cd frontend && npm run build`; Docker
+# builds its own copy in the frontend-build stage (Dockerfile), so neither
+# needs this tracked in git.
+/frontend/dist/
+/frontend/node_modules/
+

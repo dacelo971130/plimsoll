@@ -1,0 +1,329 @@
+@import "tailwindcss";
+
+/* Self-hosted webfonts (npm @fontsource/*) — bundled by Vite as local
+ * assets, never fetched from an external CDN (ui-spec §4.4 / B11).
+ * 2026-09-28 品牌對齊 — 行銷網站用字 IBM Plex Sans／IBM Plex Mono，自架字重
+ * 400/500/600/700（sans）與 400/500/600（mono），--font-ui/--font-mono 預設
+ * 見 tokens.css。原本的 Inter 已整套移除（import 與 package.json 依賴）：
+ * 介面字體選擇器早在小win #07被拿掉，useSettings.ts 現在寫死 IBM Plex
+ * Sans，Inter 沒有任何 token 在用它了。 */
+@import "@fontsource/noto-sans-tc/chinese-traditional-400.css";
+@import "@fontsource/noto-sans-tc/chinese-traditional-500.css";
+@import "@fontsource/noto-sans-tc/chinese-traditional-700.css";
+@import "@fontsource/ibm-plex-sans/400.css";
+@import "@fontsource/ibm-plex-sans/500.css";
+@import "@fontsource/ibm-plex-sans/600.css";
+@import "@fontsource/ibm-plex-sans/700.css";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+
+@import "./styles/tokens.css";
+
+@theme {
+  --color-ink-900: var(--ink-900);
+  --color-ink-800: var(--ink-800);
+  --color-ink-700: var(--ink-700);
+  --color-ink-600: var(--ink-600);
+  --color-ink-500: var(--ink-500);
+  --color-ink-400: var(--ink-400);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-accent-soft: var(--accent-soft);
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-rail: var(--rail);
+  /* Was missing entirely — every `text-on-accent` class across the app
+   * (every bg-ink-800 filled "primary" button: ＋新的比對, 開始比對, 送出
+   * review/export…) compiled to NO CSS RULE AT ALL, since Tailwind v4 only
+   * generates a color utility for keys actually present in this @theme
+   * block. The class name looked legitimate and `--on-accent` existed in
+   * tokens.css, but with no `--color-on-accent` mapping here, `.text-on-
+   * accent` never made it into the generated stylesheet — the buttons fell
+   * back to the inherited body ink color, i.e. dark text on a dark navy
+   * fill. That (not the ink-400/500 resting-state issue fixed separately
+   * below) is what actually made primary buttons unreadable/"look
+   * disabled" per repeated user feedback. */
+  --color-on-accent: var(--on-accent);
+
+  --color-high-700: var(--high-700);
+  --color-high-500: var(--high-500);
+  --color-high-50: var(--high-50);
+  --color-high-200: var(--high-200);
+  --color-med-700: var(--med-700);
+  --color-med-500: var(--med-500);
+  --color-med-50: var(--med-50);
+  --color-med-200: var(--med-200);
+  --color-low-700: var(--low-700);
+  --color-low-500: var(--low-500);
+  --color-low-50: var(--low-50);
+  --color-low-200: var(--low-200);
+  --color-high-fill: var(--high-fill);
+  --color-high-on-fill: var(--high-on-fill);
+  --color-med-fill: var(--med-fill);
+  --color-med-on-fill: var(--med-on-fill);
+  --color-low-fill: var(--low-fill);
+  --color-low-on-fill: var(--low-on-fill);
+
+  --font-sans: var(--font-ui);
+  --font-serif-cjk: var(--font-serif);
+  --font-mono-cjk: var(--font-mono);
+}
+
+@layer base {
+  body {
+    background-color: var(--canvas);
+    color: var(--ink-700);
+  }
+  * {
+    border-color: var(--line);
+  }
+
+  /* Every button gets a consistent press animation — one global rule
+   * instead of hand-adding active: utilities to dozens of button call
+   * sites. Disabled buttons are excluded so a greyed-out control doesn't
+   * look clickable. */
+  button {
+    transition:
+      transform 120ms ease,
+      background-color 200ms ease,
+      border-color 200ms ease,
+      color 200ms ease,
+      opacity 150ms ease;
+  }
+  button:not(:disabled):active {
+    transform: scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* CenterStage difference-mark flash: clicking a difference in the right
+ * panel's list scrolls the corresponding <mark> into view and briefly rings
+ * it, so the eye finds it even inside a long page of highlighted text. */
+@keyframes diff-flash {
+  0% {
+    box-shadow: 0 0 0 3px var(--accent-soft);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.diff-mark-flash {
+  animation: diff-flash 1.6s ease-out;
+}
+
+/* 覆核人身分 block, after IdentityHint jumps to it — a warm ring in the same
+ * yellow as the hint itself, so the eye connects "that warning" to "this box". */
+@keyframes identity-flash {
+  0%,
+  40% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--med-fill) 55%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 3px transparent;
+  }
+}
+
+.identity-flash {
+  animation: identity-flash 1.8s ease-out;
+}
+
+/* 2026-09-27 使用者回饋「點選時要有切換的動畫」— two halves of one switch:
+ * the risk tile that just became active pops (its fill colour itself fades
+ * in via the button transition above), and the diff list below re-enters
+ * card by card (DiffListMessage keys its list on the active filters, so a
+ * filter change remounts it and replays this). `both` keeps a card whose
+ * staggered delay hasn't started yet invisible instead of flashing in. */
+@keyframes tile-pop {
+  0% {
+    transform: scale(0.94);
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.tile-pop {
+  animation: tile-pop 240ms ease-out;
+}
+
+@keyframes list-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.list-in {
+  animation: list-in 220ms ease-out both;
+}
+
+/* 專注簽核 deck (FocusReviewDeck) — the backdrop fades in once; each card
+ * slides in from the side the reviewer moved toward, with a slight tilt, the
+ * way a flashcard is dealt. Only the incoming card animates: the outgoing
+ * one is already unmounted (the card is keyed on its id). */
+@keyframes deck-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.deck-fade {
+  animation: deck-fade 180ms ease-out;
+}
+
+@keyframes deck-in-next {
+  from {
+    opacity: 0;
+    transform: translateX(56px) rotate(1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes deck-in-prev {
+  from {
+    opacity: 0;
+    transform: translateX(-56px) rotate(-1.5deg);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.deck-in-next {
+  animation: deck-in-next 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+.deck-in-prev {
+  animation: deck-in-prev 280ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* 載重線動畫 (LoadLineLoader) — the website hero's draw-in timing (disc,
+ * then the red line, then the draft ticks), a slow sideways sway on the
+ * water surface, ticks turning red once the water has passed them, and the
+ * site's three-pulse flash when the water reaches the line. The rise itself
+ * is requestAnimationFrame-driven in LoadLineLoader.tsx. Under reduced
+ * motion the global rule above collapses all of these to their end state. */
+.ll-draw-disc {
+  stroke-dasharray: 400;
+  stroke-dashoffset: 400;
+  animation: ll-draw 1.1s ease-out 0.1s forwards;
+}
+
+.ll-draw-line {
+  stroke-dasharray: 230;
+  stroke-dashoffset: 230;
+  animation: ll-draw 0.9s ease-out 0.45s forwards;
+}
+
+@keyframes ll-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.ll-fade-in {
+  opacity: 0;
+  animation: ll-fade-in 0.5s ease-out 0.9s forwards;
+}
+
+.ll-fade-in-late {
+  opacity: 0;
+  animation: ll-fade-in 0.6s ease-out 2s forwards;
+}
+
+@keyframes ll-fade-in {
+  to {
+    opacity: 1;
+  }
+}
+
+.ll-water-sway {
+  animation: ll-sway 2.6s ease-in-out infinite;
+}
+
+@keyframes ll-sway {
+  50% {
+    transform: translateX(-12px);
+  }
+}
+
+.ll-tick {
+  stroke: var(--brand-ring);
+  transition: stroke 300ms ease;
+}
+
+.ll-tick.ll-hit {
+  stroke: #c8102e;
+}
+
+.ll-label {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  fill: var(--ink-600);
+}
+
+.ll-flash {
+  opacity: 0;
+  animation: ll-flash 0.6s ease-out 3;
+}
+
+@keyframes ll-flash {
+  30% {
+    opacity: 1;
+  }
+  60%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* User feedback: "所有按鈕都類似反灰狀態" — every real <button> in this app
+ * rests at text-ink-400/text-ink-500 (a pale grey) and only reaches full
+ * contrast on :hover, so at rest it reads as indistinguishable from a
+ * genuinely disabled control. Deliberately unlayered (not @layer base) so it
+ * beats Tailwind's utilities layer on cascade order alone, with no
+ * specificity fight needed against the base text-ink-400/500 utility
+ * classes — but each selector still carries its own :not(:hover)/
+ * :not(:disabled) guard so the moment a button IS hovered or disabled, it
+ * simply stops matching and Tailwind's own hover:/disabled: utility (in that
+ * same utilities layer) takes back over. Scoped to `button.*`, never the
+ * bare `.text-ink-400`/`.text-ink-500` classes, so plain secondary-text
+ * labels elsewhere keep their intentionally muted tone. */
+button.text-ink-400:not(:hover):not(:disabled) {
+  color: var(--ink-600);
+}
+button.text-ink-500:not(:hover):not(:disabled) {
+  color: var(--ink-700);
+}
+button.border-line:not(:disabled) {
+  border-color: var(--ink-400);
+}
+button:disabled {
+  cursor: not-allowed;
+}

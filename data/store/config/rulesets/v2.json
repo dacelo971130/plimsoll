@@ -1,0 +1,43 @@
+{
+  "version": "v2",
+  "safety_terms":     ["必須","禁止","警告","危險","壓力","溫度","bar","mpa","高於","低於","限值"],
+  "obligation_terms": ["必須","應","不得","禁止","建議","每次","每週","每月","定期"],
+  "applicability_terms": ["適用","限用","僅適用"],
+  "rules": [
+    { "id": "cumulative_drift", "priority": 5,
+      "when": { "series_length": ">=3", "direction_consistent": true, "total_delta_ratio": ">=0.01" },
+      "then": { "risk": "High", "confidence": "中",
+                "rationale": "同一參數在最近 N 版持續同向調整，單步皆未達門檻但累積已跨越安全邊界",
+                "recommended_action": "回溯比對首版與現行版，確認累積調整是否經過完整安全評估" } },
+
+    { "id": "numeric_safety",  "priority": 10, "when": { "numeric_change": true, "safety_terms": true },
+      "then": { "risk": "High",   "confidence": "高", "rationale": "數值與安全條件變更（壓力／溫度／極限參數）", "recommended_action": "停用舊版對應檢查表，通知工程人員並重新簽核" } },
+
+    { "id": "parts_change",         "priority": 15,
+      "when": { "part_number_change": true },
+      "then": { "risk": "High", "confidence": "高",
+                "rationale": "零件料號或型號變更，舊料號庫存與既有檢查表可能失效",
+                "recommended_action": "確認新舊料號相容性，更新備品清單與採購規格" } },
+
+    { "id": "applicability_change", "priority": 16,
+      "when": { "applicability_change": true },
+      "then": { "risk": "High", "confidence": "中",
+                "rationale": "適用船型／範圍／條件變更，影響哪些船舶須套用本程序",
+                "recommended_action": "重新確認船隊適用清單，對新納入船型執行差異訓練" } },
+
+    { "id": "step_order_change",    "priority": 17,
+      "when": { "step_order_change": true },
+      "then": { "risk": "High", "confidence": "中",
+                "rationale": "操作步驟順序調整，動作集合相同但執行序不同",
+                "recommended_action": "更新 SOP 圖卡，對現場人員做順序變更說明" } },
+
+    { "id": "obligation_plus", "priority": 20, "when": { "obligation_change": true, "any_of": ["safety_terms","numeric_change"] },
+      "then": { "risk": "High",   "confidence": "高", "rationale": "作業程序／頻率／禁止性語意變更，需品保人員人工覆核", "recommended_action": "更新 SOP 流程並重新訓練維修工程人員" } },
+    { "id": "obligation_only", "priority": 30, "when": { "obligation_change": true },
+      "then": { "risk": "Medium", "confidence": "中", "rationale": "程序義務或維修頻率改變，需人工確認", "recommended_action": "調整定期保養排程與紀錄表" } },
+    { "id": "safety_only",     "priority": 40, "when": { "safety_terms": true },
+      "then": { "risk": "Medium", "confidence": "中", "rationale": "內容含安全關鍵詞，建議人工覆核", "recommended_action": "工程主管雙重確認" } },
+    { "id": "default",         "priority": 999, "when": {},
+      "then": { "risk": "Low",    "confidence": "高", "rationale": "一般文字或說明變更", "recommended_action": "更新技術手冊檔案存檔" } }
+  ]
+}

@@ -1,0 +1,348 @@
+{
+  "version": "v1",
+  "status": "draft",
+  "drafted_by": "claude",
+  "drafted_at": "2026-09-27",
+  "reviewed_by": null,
+  "reviewed_at": null,
+  "note": "受控詞彙表草稿（docs/redesign/plimsoll-review-agent-spec.md §4.5）。覆核 Agent 的名詞解釋、簽核報告附錄、使用說明頁共用這一份。每條定義都指回 repo 內的出處；出處不足或需企業確認的標為 pending（待確認）。人工審過、把頂層 status 改成 approved 之前，Agent 不得引用本檔，所有名詞一律列入待確認。",
+  "terms": [
+    {
+      "term": "差異",
+      "aliases": ["版本差異"],
+      "category": "差異與類型",
+      "definition": "舊版與新版之間，一段內容被新增、刪除或修改的地方。每筆差異都帶有舊版與新版的頁碼與原文。",
+      "sources": ["data/specs/船舶技術文件版本差異_Agent_工作包.html（不可少的輸出）", "backend/services/comparison.py"],
+      "status": "draft"
+    },
+    {
+      "term": "新增",
+      "category": "差異與類型",
+      "definition": "只出現在新版、舊版沒有對應段落的內容。",
+      "sources": ["backend/services/comparison.py（change_type）"],
+      "status": "draft"
+    },
+    {
+      "term": "刪除",
+      "category": "差異與類型",
+      "definition": "只出現在舊版、新版已經移除的內容。",
+      "sources": ["backend/services/comparison.py（change_type）"],
+      "status": "draft"
+    },
+    {
+      "term": "修改",
+      "category": "差異與類型",
+      "definition": "舊版與新版都有對應段落，但文字不同。",
+      "sources": ["backend/services/comparison.py（change_type）"],
+      "status": "draft"
+    },
+    {
+      "term": "工程圖差異",
+      "aliases": ["工程圖區塊"],
+      "category": "差異與類型",
+      "definition": "工程圖頁面上，以兩版影像比對找出有變化的區塊。AI 只描述看得到的視覺差異與圖上的文字標註，不推測工程意涵；看不出是什麼元件時不填元件名稱。",
+      "sources": ["backend/services/drawing_diff.py", "backend/services/llm/prompts.py（DRAWING_REGION_SYSTEM_PROMPT）"],
+      "status": "draft"
+    },
+    {
+      "term": "風險等級",
+      "aliases": ["High", "Medium", "Low"],
+      "category": "風險與規則",
+      "definition": "規則引擎依觸發的規則給出的初步分級，最終由覆核人決定。High：觸發「數值變更＋安全關鍵詞」「零件料號／型號變更」「適用範圍／條件變更」「操作步驟順序變更」「義務詞彙變更＋安全關鍵詞／數值」「累積漂移（跨版本）」其中之一。Medium：觸發「義務詞彙變更」或「安全關鍵詞」。Low：沒有觸發任何規則的一般文字變更。",
+      "sources": ["data/store/config/rulesets/v2.json（rules[].then.risk）"],
+      "status": "draft"
+    },
+    {
+      "term": "重大變更",
+      "category": "風險與規則",
+      "definition": "目前以規則引擎判為 High 的差異，視為「候選」重大變更。企業正式的重大變更門檻尚未確認。",
+      "sources": ["data/specs/船舶技術文件版本差異_Agent_工作包.html（成功指標：「重大變更」門檻為 Q，應由企業確認）"],
+      "status": "pending"
+    },
+    {
+      "term": "觸發規則",
+      "category": "風險與規則",
+      "definition": "決定一筆差異風險等級的那一條規則。規則依設定的優先順序逐條比對，取第一條符合的；每筆差異只對應一條規則。",
+      "sources": ["backend/services/comparison.py（classify：依 priority 排序，第一條符合即回傳）", "data/store/config/rulesets/v2.json"],
+      "status": "draft"
+    },
+    {
+      "term": "數值變更＋安全關鍵詞",
+      "category": "風險與規則",
+      "definition": "數值有改變，而且內容含安全關鍵詞（例如溫度、壓力、限值）的變更。預設風險 High。",
+      "sources": ["data/store/config/rulesets/v2.json（numeric_safety）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "零件料號／型號變更",
+      "category": "風險與規則",
+      "definition": "零件料號或型號改變。舊料號的庫存與既有檢查表可能因此失效。預設風險 High。",
+      "sources": ["data/store/config/rulesets/v2.json（parts_change）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "適用範圍／條件變更",
+      "category": "風險與規則",
+      "definition": "適用的船型、範圍或條件改變，會影響哪些船舶必須套用這份程序。預設風險 High。",
+      "sources": ["data/store/config/rulesets/v2.json（applicability_change）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "操作步驟順序變更",
+      "category": "風險與規則",
+      "definition": "操作步驟的集合相同，但執行順序不同。預設風險 High。",
+      "sources": ["data/store/config/rulesets/v2.json（step_order_change）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "義務詞彙變更＋安全關鍵詞／數值",
+      "category": "風險與規則",
+      "definition": "「必須、應、不得、禁止、定期」這類義務詞改變，而且同時涉及安全關鍵詞或數值變更，代表作業程序、頻率或禁止性要求改變。預設風險 High。",
+      "sources": ["data/store/config/rulesets/v2.json（obligation_plus）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "義務詞彙變更",
+      "category": "風險與規則",
+      "definition": "只有義務詞改變（例如程序義務或保養頻率），不涉及安全關鍵詞或數值。預設風險 Medium。",
+      "sources": ["data/store/config/rulesets/v2.json（obligation_only）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "安全關鍵詞",
+      "category": "風險與規則",
+      "definition": "規則引擎用來判斷內容是否涉及安全的詞表，目前包含：必須、禁止、警告、危險、壓力、溫度、bar、MPa、高於、低於、限值。只含安全關鍵詞、沒有觸發其他規則的差異，預設風險 Medium。",
+      "sources": ["data/store/config/rulesets/v2.json（safety_terms、safety_only）"],
+      "status": "draft"
+    },
+    {
+      "term": "義務詞彙",
+      "category": "風險與規則",
+      "definition": "規則引擎用來判斷作業義務或頻率的詞表，目前包含：必須、應、不得、禁止、建議、每次、每週、每月、定期。",
+      "sources": ["data/store/config/rulesets/v2.json（obligation_terms）"],
+      "status": "draft"
+    },
+    {
+      "term": "一般文字變更（無規則命中）",
+      "category": "風險與規則",
+      "definition": "沒有觸發任何規則的文字或說明變更。預設風險 Low。",
+      "sources": ["data/store/config/rulesets/v2.json（default）", "frontend/src/lib/ruleLabels.ts"],
+      "status": "draft"
+    },
+    {
+      "term": "累積漂移（跨版本）",
+      "category": "多版本",
+      "definition": "同一個參數在連續至少三個版本裡持續往同一個方向調整：單次調整都沒有達到門檻，但累積起來已跨越安全邊界。預設風險 High。",
+      "sources": ["data/store/config/rulesets/v2.json（cumulative_drift：series_length >= 3、direction_consistent）"],
+      "status": "draft"
+    },
+    {
+      "term": "信心",
+      "aliases": ["信心（高／中／低）"],
+      "category": "風險與規則",
+      "definition": "規則引擎對自己分級的把握程度，由規則設定檔為每條規則預先給定（高／中／低），不是統計機率。",
+      "sources": ["data/store/config/rulesets/v2.json（rules[].then.confidence）"],
+      "status": "draft"
+    },
+    {
+      "term": "建議動作",
+      "category": "風險與規則",
+      "definition": "依觸發規則帶出的預設處置建議，例如「停用舊版對應檢查表，通知工程人員並重新簽核」。觸發同一條規則的差異會得到相同的建議。它是建議，不是指令。",
+      "sources": ["data/store/config/rulesets/v2.json（rules[].then.recommended_action）"],
+      "status": "draft"
+    },
+    {
+      "term": "受影響設備／流程",
+      "category": "風險與規則",
+      "definition": "目前取差異所在章節的標題（例如「3. 冷卻溫度檢查」），尚未對應到具體的設備或零件編號。",
+      "sources": ["backend/services/comparison.py（affected）", "backend/services/session_store.py（component_ref 保留欄位，目前為空）"],
+      "status": "draft"
+    },
+    {
+      "term": "PDF 頁碼",
+      "category": "頁碼與來源",
+      "definition": "PDF 檔案裡的實際頁序，也就是「第幾頁」。",
+      "sources": ["docs/redesign/ui-spec.md（§9 #22 雙頁碼）"],
+      "status": "draft"
+    },
+    {
+      "term": "印刷頁碼",
+      "category": "頁碼與來源",
+      "definition": "文件本身印在頁面上的頁碼，取自 PDF 的頁碼標籤。抓不到時留空並標示為未知，不猜測。",
+      "sources": ["docs/redesign/ui-spec.md（§9 #22 雙頁碼）"],
+      "status": "draft"
+    },
+    {
+      "term": "原文",
+      "aliases": ["來源段落"],
+      "category": "頁碼與來源",
+      "definition": "差異所在的原始文字段落，可以展開與另一版對照，用來回到文件本身查核。",
+      "sources": ["data/specs/船舶技術文件版本差異_Agent_工作包.html（每列保留舊版頁／段落、新版頁／段落與可展開原文）"],
+      "status": "draft"
+    },
+    {
+      "term": "引用",
+      "category": "頁碼與來源",
+      "definition": "指回原文的標記，格式如「D01 · 新 p.4」；點擊會跳到該頁。",
+      "sources": ["docs/redesign/ui-spec.md（§3.2 引用 pill）"],
+      "status": "draft"
+    },
+    {
+      "term": "掃描頁",
+      "category": "頁碼與來源",
+      "definition": "沒有文字層、只有影像的頁面，要先經 OCR 轉成文字才能比對；系統會提示人工雙重校對，以防漏看重大變更。",
+      "sources": ["backend/services/extraction.py（掃描頁偵測）", "frontend/src/app（掃描頁警示文案）"],
+      "status": "draft"
+    },
+    {
+      "term": "OCR 信心",
+      "category": "頁碼與來源",
+      "definition": "AI 辨識掃描頁文字時，自評這一頁看得多清楚。看不清楚時信心會調低，該頁的比對結果需要人工校對。",
+      "sources": ["backend/services/llm/prompts.py（OCR_SYSTEM_PROMPT）", "backend/services/ocr/pipeline.py"],
+      "status": "draft"
+    },
+    {
+      "term": "需人工比對",
+      "category": "頁碼與來源",
+      "definition": "系統無法可信地對齊兩版段落，或文字擷取品質太低時的標示。此時系統不下結論，由人查看兩段原文判斷。",
+      "sources": ["data/specs/船舶技術文件版本差異_Agent_工作包.html（規則 R3、AC4）"],
+      "status": "draft"
+    },
+    {
+      "term": "覆核",
+      "category": "覆核與簽核",
+      "definition": "人對每一筆差異做的最終判定。系統給的風險等級只是初判，覆核人可以改判。",
+      "sources": ["docs/redesign/ui-spec.md（§3.2 ReviewBar：三選一判定＋風險改判）", "data/specs/船舶技術文件版本差異_Agent_工作包.html（工程人員仍是最終決策者）"],
+      "status": "draft"
+    },
+    {
+      "term": "已確認",
+      "category": "覆核與簽核",
+      "definition": "覆核人已看過並確認這筆差異。風險等級為 High 的差異，要標為「已確認」才不算未覆核。",
+      "sources": ["frontend/src/app/thread/ReviewBar.tsx", "backend/services/session_store.py（unreviewed_high_differences）"],
+      "status": "draft"
+    },
+    {
+      "term": "需追蹤",
+      "category": "覆核與簽核",
+      "definition": "覆核人判定這筆差異需要後續追蹤。已知行為：標為「需追蹤」的 High 在匯出時仍算未覆核。「追蹤」由誰、在哪裡、用什麼流程進行，規格沒有定義。",
+      "sources": ["frontend/src/app/thread/ReviewBar.tsx", "backend/services/session_store.py（unreviewed_high_differences）"],
+      "status": "pending"
+    },
+    {
+      "term": "不採納",
+      "category": "覆核與簽核",
+      "definition": "覆核人不採納這筆差異的系統初判。規格曾提議把這個選項改名為「誤報」，但介面目前仍顯示「不採納」，兩者是否同義尚未確認。",
+      "sources": ["frontend/src/app/thread/ReviewBar.tsx", "docs/redesign/ui-spec.md（第三個選項從「不採納」改為「誤報」的提議）"],
+      "status": "pending"
+    },
+    {
+      "term": "誤報",
+      "category": "覆核與簽核",
+      "definition": "系統標出的差異其實不是實質變更，例如排版位移或掃描歪斜造成的假差異。",
+      "sources": ["docs/redesign/ui-spec.md（明示誤報來源：排版位移、掃描歪斜）", "frontend/src/app/thread/DiffListMessage.tsx（誤報標籤）"],
+      "status": "draft"
+    },
+    {
+      "term": "未覆核 High",
+      "category": "覆核與簽核",
+      "definition": "風險等級為 High、但覆核判定還不是「已確認」的差異。匯出報告時，系統會逐筆列出並要求二次確認。",
+      "sources": ["backend/services/session_store.py（unreviewed_high_differences）", "backend/api/sessions.py（匯出回 428 與清單）"],
+      "status": "draft"
+    },
+    {
+      "term": "修訂草稿",
+      "category": "覆核與簽核",
+      "definition": "仍有未覆核 High 時匯出的報告。報告封面會加註警示，並由匯出的人承擔簽核責任。",
+      "sources": ["backend/services/export.py", "frontend/src/app/thread/UnreviewedExportGuard.tsx"],
+      "status": "draft"
+    },
+    {
+      "term": "簽核",
+      "category": "覆核與簽核",
+      "definition": "匯出報告時填寫覆核人姓名、核准角色、報告編號與部門，系統會留下一筆簽核紀錄。",
+      "sources": ["HANDOFF.md（P4 簽核表單與 EXPORT_SIGNOFF）", "backend/services/session_store.py（export_session）"],
+      "status": "draft"
+    },
+    {
+      "term": "核准角色",
+      "category": "覆核與簽核",
+      "definition": "覆核人在簽核時選擇的身分，目前有：DPA（Designated Person Ashore）、船舶技術監督、船隊經理、其他。",
+      "sources": ["data/store/config/approval_roles.json"],
+      "status": "draft"
+    },
+    {
+      "term": "核准權限",
+      "category": "覆核與簽核",
+      "definition": "每個核准角色可以覆核的最高風險等級：DPA（Designated Person Ashore）與船舶技術監督可到 High，船隊經理可到 Medium，其他只到 Low。超過權限的覆核會被伺服器拒絕。",
+      "sources": ["data/store/config/approval_policies/v2.json", "backend/models/config_models.py（can_approve）"],
+      "status": "draft"
+    },
+    {
+      "term": "覆核紀錄",
+      "aliases": ["稽核紀錄"],
+      "category": "覆核與簽核",
+      "definition": "每一次覆核、改判、簽核都追加一筆新紀錄，不會覆寫舊的；系統也能檢查紀錄是否被竄改。",
+      "sources": ["README.md（設計原則 2：覆核狀態＝事件流投影、凍結前綴 SHA-256 錨點）"],
+      "status": "draft"
+    },
+    {
+      "term": "規則計算",
+      "category": "資料來源標示",
+      "definition": "由規則引擎依設定檔算出的結果。同樣的文件、同樣的規則版本，永遠得到同樣的結果。",
+      "sources": ["docs/redesign/ui-spec.md（§9 #22 data_origin：computed）"],
+      "status": "draft"
+    },
+    {
+      "term": "AI 推論",
+      "category": "資料來源標示",
+      "definition": "由 AI 模型產生的建議或說明，只供參考；不會自動成為覆核判定。",
+      "sources": ["docs/redesign/ui-spec.md（§9 #22 data_origin：ai_inferred）", "backend/services/llm/prompts.py（建議永遠不會被系統直接採用）"],
+      "status": "draft"
+    },
+    {
+      "term": "示範資料",
+      "aliases": ["合成資料"],
+      "category": "資料來源標示",
+      "definition": "為示範而虛構的文件內容，不是真實的船舶技術文件或規範，不可當成操作指示。",
+      "sources": ["data/demo/*.pdf（頁首：Fictional training data - not an operational instruction）", "docs/redesign/ui-spec.md（§9 #22 data_origin：demo_seed）"],
+      "status": "draft"
+    },
+    {
+      "term": "鏈式比對",
+      "aliases": ["多版本比對"],
+      "category": "多版本",
+      "definition": "把同一份文件的多個版本依序比對（例如 v1.0 → v1.4），觀察同一個參數在各版的變化，找出累積漂移。",
+      "sources": ["backend/services/chain.py（build_chain、compute_drift_report）"],
+      "status": "draft"
+    },
+    {
+      "term": "詞彙別名",
+      "category": "多版本",
+      "definition": "同一件事的不同說法，例如「最高溫度限值」與「溫度上限」。經人工核准後，比對時視為同一個詞；AI 只能提出候選，不能自行生效。",
+      "sources": ["data/store/config/term_aliases/v1.json", "backend/services/normalize.py（別名治理）"],
+      "status": "draft"
+    },
+    {
+      "term": "待確認",
+      "category": "覆核 Agent",
+      "definition": "資料不足、文件中找不到依據、詞彙表沒有定義，或信心偏低的項目。需要人查證後才能下結論，系統不會替它補上答案。",
+      "sources": ["docs/redesign/plimsoll-review-agent-spec.md（§4.5）"],
+      "status": "draft"
+    },
+    {
+      "term": "覆核簡報",
+      "category": "覆核 Agent",
+      "definition": "Agent 在比對完成後整理的摘要：覆核順序、警示、各項影響範圍與建議動作，每句附引用。它是建議，不是判定。",
+      "sources": ["docs/redesign/plimsoll-review-agent-spec.md（§4.2）"],
+      "status": "draft"
+    },
+    {
+      "term": "Agent 建議",
+      "category": "覆核 Agent",
+      "definition": "Agent 替差異預先勾選的覆核判定建議，附理由與引用。要由人按下確認才會寫入覆核紀錄；High 必須逐筆確認，不能批次。",
+      "sources": ["docs/redesign/plimsoll-review-agent-spec.md（§4.4）"],
+      "status": "draft"
+    }
+  ]
+}

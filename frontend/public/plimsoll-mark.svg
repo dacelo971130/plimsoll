@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Plimsoll load-line mark, same geometry as the product website's own
+       favicon (plimsoll-index: r=36, stroke 9 — a touch heavier than the
+       in-app BrandMark so it survives 16px). 2026-09-28: renamed from
+       favicon.svg so browsers holding the old cached /favicon.svg (the Vite
+       purple bolt) actually fetch this one. The ring switches to navy-200 on
+       dark browser chrome (no CSS variables in a favicon, hence the embedded
+       <style>); the red line stays #C8102E. -->
+  <style>
+    .ring { stroke: #0B2F6B; }
+    @media (prefers-color-scheme: dark) {
+      .ring { stroke: #B9C7E3; }
+    }
+  </style>
+  <circle class="ring" cx="50" cy="50" r="36" fill="none" stroke-width="9"/>
+  <line x1="6" y1="50" x2="94" y2="50" stroke="#C8102E" stroke-width="9"/>
+</svg>

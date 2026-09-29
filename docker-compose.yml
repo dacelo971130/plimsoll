@@ -1,0 +1,42 @@
+services:
+  plimsoll:
+    build: .
+    ports:
+      # 8110, not 8099: 8099 is the port the Postman Interceptor Chrome
+      # extension uses to reach the Postman app, so with Plimsoll on it the
+      # extension kept opening WebSockets here — every one a "WebSocket /"
+      # 403 in this log — and Interceptor itself couldn't find Postman.
+      - "8110:8110"
+    volumes:
+      # Named (not bind-mounted) volume — on first run Docker seeds it from
+      # the image's /app/data/store (approval roles/rulesets/term aliases),
+      # then session/export/audit files persist here across restarts.
+      - plimsoll-data:/app/data/store
+      # Bind-mounted (not baked into the image) — data/specs/ is git-tracked
+      # so every checkout already has it, but the Dockerfile only ever COPYs
+      # data/demo/. A read-only bind mount lets the 示範資料 picker's
+      # ccs_steel_ships fixture (docs/redesign/plimsoll-real-document-
+      # smoketest-2026-09.html) work without rebuilding the image — restart
+      # the container and it picks up whatever's on disk here.
+      - ./data/specs:/app/data/specs:ro
+      # Same idea for the real third-party fixtures (EASA/UNECE/CFR1512/
+      # SOLAS/scanned-page-test) — .gitignored (ABS/EASA carry their own
+      # copyright notices, see .gitignore), so this only ever has content on
+      # a machine someone deliberately copied them onto; harmless no-op
+      # (empty dir) everywhere else, and never baked into the image itself.
+      - ./data/external-samples:/app/data/external-samples:ro
+    environment:
+      # Optional — server-side LLM keys for the semantic layer / OCR
+      # (backend/services/llm/provider.py). Leave unset to run with rules-
+      # only analysis; the app degrades gracefully either way. The client's
+      # own BYOK key (Settings → AI 模型) is separate from these.
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Shared demo password (backend/api/demo_auth.py). Empty = gate off,
+      # which is right for localhost only — set it before exposing the port
+      # through a tunnel, or anyone with the URL can wipe every session.
+      - PLIMSOLL_DEMO_PASSWORD=${PLIMSOLL_DEMO_PASSWORD:-}
+
+volumes:
+  plimsoll-data:

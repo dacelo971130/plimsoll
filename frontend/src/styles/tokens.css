@@ -1,0 +1,320 @@
+/* Design tokens — ui-spec.md §4 (中性階 §4.1 / 風險語意色 §4.2 / 比對高亮 §4.5).
+ *
+ * Twenty-style neutral-grey system: the ONLY colour is risk semantics
+ * (High/Medium/Low) and the diff highlight presets. Everything else is
+ * ink/line/surface greys shared by light and dark.
+ *
+ * Theme resolution order (per ui-spec §4.3):
+ *   1. bare :root                          -> light palette (default)
+ *   2. prefers-color-scheme: dark          -> dark palette, UNLESS
+ *   3. [data-theme="light"]                -> forces light regardless of OS
+ *   4. [data-theme="dark"]                 -> forces dark regardless of OS
+ */
+
+:root {
+  color-scheme: light;
+
+  /* neutral scale */
+  --ink-900: #000000;
+  --ink-800: #171717;
+  --ink-700: #333333;
+  --ink-600: #575757;
+  --ink-500: #6b6b6b;
+  --ink-400: #a5a5a5;
+  --line: #e3e3e3;
+  --line-soft: #ededed;
+  --accent-soft: #f1f1f1;
+  --canvas: #f5f5f5;
+  --surface-2: #fafafa;
+  --rail: #fafafa;
+  --surface: #ffffff;
+  --on-accent: #ffffff;
+  /* 2026-09-28 品牌對齊 — 自訂色調的預設色改成品牌海軍藍（原 #1e3a5f 只是隨手選
+   * 的深藍，跟網站沒有關係）。*/
+  --custom-accent-color: #0B2F6B;
+  /* BrandMark 圓環色 — 預設（經典／淺色）用品牌深海軍藍；深色主題會蓋成較淺的
+   * navy-200，見下面 navy 主題的 dark 區塊，否則深色頂欄背景幾乎看不到圓環。
+   * 紅線一律 #C8102E，不隨主題變，故不用做成變數。 */
+  --brand-ring: #0B2F6B;
+  /* 載重線動畫的水（LoadLineLoader）— 網站的 --navy-200。深色主題另給一個中
+   * 間調：navy-200 在深色已經是圓環的顏色，水跟環同色就糊成一塊。 */
+  --brand-water: #B9C7E3;
+
+  /* risk semantic colour — text / mark / bg / border */
+  --high-700: #b3241b;
+  --high-500: #ce3a31;
+  --high-50: #fbf2f1;
+  --high-200: #f0cdca;
+
+  --med-700: #8e540c;
+  --med-500: #c07c1a;
+  --med-50: #faf6ee;
+  --med-200: #eadcbe;
+
+  --low-700: #14603f;
+  --low-500: #248a5f;
+  --low-50: #f1f7f3;
+  --low-200: #c7e2d5;
+
+  /* risk solid fill — 2026-09-27 使用者回饋「紅／黃／綠醒目色，不可擋住字」:
+   * the ONE fill that the risk filter tiles, RiskPill and the diff-card
+   * stripe all share, so the same risk reads as the same colour everywhere.
+   * --*-on-fill is the text colour ON that fill.
+   * 2026-09-28 品牌對齊 — high/low 改用網站的 --red/--green，白字對比重新量過：
+   * white on #C8102E ≈5.88:1、white on #1F6E4A ≈6.2:1，兩者都 ≥4.5:1 沒問題；
+   * med-fill 維持原本的黃（#f0b400 對白字僅 1.9:1，改用深色字 ≈7.28:1）。
+   * Deliberately not redefined in the dark blocks below: a saturated fill
+   * reads the same on either canvas, and the on-fill pairing stays valid. */
+  --high-fill: #C8102E;
+  --high-on-fill: #ffffff;
+  --med-fill: #f0b400;
+  --med-on-fill: #3d2b00;
+  --low-fill: #1F6E4A;
+  --low-on-fill: #ffffff;
+
+  /* diff highlight presets — switched via [data-highlight] on <html> */
+  --diff-add: #248a5f;
+  --diff-del: #ce3a31;
+  --diff-hit: #f3e6c4;
+
+  /* type + radius + shadow */
+  /* 2026-09-28 品牌對齊 — 介面字體預設從 Inter 換成 IBM Plex Sans（行銷網站
+   * 用字）；Inter 的 import／package.json 依賴已整套移除，見 index.css。 */
+  --font-ui: 'IBM Plex Sans', 'Noto Sans TC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-serif: 'Noto Serif TC', ui-serif, Georgia, serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* P5 GeneralTab 「原文字體」— only the reconstructed-text viewer column
+   * (CenterStage) uses this; everything else in the UI stays on --font-ui. */
+  --font-source: 'Noto Sans TC', ui-sans-serif, system-ui, sans-serif;
+
+  /* P5 GeneralTab — font size (4-tier, scales the whole rem-based Tailwind
+   * scale via root font-size) and custom background image, both previously
+   * deferred as P6 Someday. --font-ui/--font-serif themselves are
+   * overridden directly (via style.setProperty) rather than through a
+   * second indirection layer here. */
+  --font-scale: 1;
+  --bg-image: none;
+
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-full: 999px;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --sh-2: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --sh-3: 0 12px 32px rgba(0, 0, 0, 0.14);
+
+  --focus-ring: 0 0 0 3px var(--accent-soft);
+}
+
+/* dark via OS preference, unless explicitly overridden to light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ink-900: #ffffff;
+    --ink-800: #ededed;
+    --ink-700: #d6d6d6;
+    --ink-600: #a5a5a5;
+    --ink-500: #818181;
+    --ink-400: #666666;
+    --line: #2e2e2e;
+    --line-soft: #242424;
+    --accent-soft: #282828;
+    --canvas: #141414;
+    --surface-2: #212121;
+    --rail: #171717;
+    --surface: #1b1b1b;
+    --on-accent: #0f0f0f;
+
+    --high-700: #f0837a;
+    --high-500: #d34a41;
+    --high-50: #2a1918;
+    --high-200: #5c2b27;
+
+    --med-700: #e3ae5e;
+    --med-500: #b98524;
+    --med-50: #251e12;
+    --med-200: #54401b;
+
+    --low-700: #63c79b;
+    --low-500: #2e9268;
+    --low-50: #152420;
+    --low-200: #24503e;
+
+    --sh-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --sh-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+    --sh-3: 0 12px 32px rgba(0, 0, 0, 0.55);
+  }
+}
+
+/* explicit toggle wins over OS preference in both directions */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink-900: #ffffff;
+  --ink-800: #ededed;
+  --ink-700: #d6d6d6;
+  --ink-600: #a5a5a5;
+  --ink-500: #818181;
+  --ink-400: #666666;
+  --line: #2e2e2e;
+  --line-soft: #242424;
+  --accent-soft: #282828;
+  --canvas: #141414;
+  --surface-2: #212121;
+  --rail: #171717;
+  --surface: #1b1b1b;
+  --on-accent: #0f0f0f;
+
+  --high-700: #f0837a;
+  --high-500: #d34a41;
+  --high-50: #2a1918;
+  --high-200: #5c2b27;
+
+  --med-700: #e3ae5e;
+  --med-500: #b98524;
+  --med-50: #251e12;
+  --med-200: #54401b;
+
+  --low-700: #63c79b;
+  --low-500: #2e9268;
+  --low-50: #152420;
+  --low-200: #24503e;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --sh-2: 0 4px 12px rgba(0, 0, 0, 0.45);
+  --sh-3: 0 12px 32px rgba(0, 0, 0, 0.55);
+}
+
+/* 比對高亮色盤 — 色盲友善 (deuteranopia/protanopia-safe blue/orange). The
+ * "經典" preset is the :root default above; switching writes
+ * [data-highlight="colorblind"] on <html>. Full custom-palette editor is
+ * out of scope for P0–P4 (ui-spec §8 P6). */
+:root[data-highlight="colorblind"] {
+  --diff-add: #1f6feb;
+  --diff-del: #d97706;
+  --diff-hit: #cfe3f7;
+}
+
+/* 整體色調 — 海軍藍 (預設，也是目前唯一值 — 見 useSettings.ts 的
+ * data-accent="navy" 硬編). "經典" (灰階, 無 [data-accent]) is the original
+ * palette above.
+ *
+ * 2026-09-28 品牌對齊 — 跟行銷網站對齊真正的品牌色，不再是隨手選的深藍：
+ * --ink-800 = 網站 --navy #0B2F6B（主按鈕／選取狀態）、--ink-900 = 網站
+ * --ink #1B2540、--ink-700…--ink-400 沿著網站 --ink-2 #4A5570／--ink-3
+ * #7B849A 的色相（hue≈220°）重建、--canvas = 網站 --paper #F6F4EE、
+ * --surface-2/--rail = 網站 --paper-2 #FBFAF7、--accent-soft = 網站
+ * --navy-50 #EEF2F8、--line/--line-soft = 網站 --line rgba(11,47,107,.14/
+ * .08) 疊在 paper 上攤平的實色。--surface 維持純白（網站卡片就是白色卡在
+ * paper 面板上）。
+ *
+ * 對比量測（前→後）：ink-900 on white 16.72→15.16、
+ * ink-800 on white 11.50→12.86、ink-700 on white 8.36→8.77、ink-600 on
+ * white 5.19→6.83、ink-500 on white 5.50→5.75（仍 ≥4.5:1）、ink-400 on
+ * white 2.98→3.57。只有 ink-900 因為釘死網站 --ink 這個色號而比原本略降，
+ * 仍是 15:1 等級的 AAA 對比。*/
+:root[data-accent="navy"] {
+  --ink-900: #1B2540;
+  --ink-800: #0B2F6B;
+  --ink-700: #3D4A6C;
+  --ink-600: #495A83;
+  --ink-500: #536593;
+  --ink-400: #7687B2;
+  --line: #d5d8dc;
+  --line-soft: #e3e4e4;
+  --accent-soft: #EEF2F8;
+  --canvas: #F6F4EE;
+  --surface-2: #FBFAF7;
+  --rail: #FBFAF7;
+  --on-accent: #ffffff;
+  --brand-ring: #0B2F6B;
+  --brand-water: #B9C7E3;
+}
+
+/* Dark 版只重建 ink 文字階（色相轉到品牌海軍藍 ≈220°，亮度微調以維持／略增
+ * 原本對比），背景（canvas/surface-2/rail/surface/line/accent-soft）色相本
+ * 來就已經在海軍藍家族內（207–212° vs 品牌 217–224°，肉眼幾乎看不出差異）
+ * 維持不動，降低誤觸其他對比配對的風險。
+ * 2026-09-28 品牌對齊 — 深色頂欄下 BrandMark 圓環用主題深藍 #0B2F6B 對
+ * bg-surface(#111a22) 只有 1.37:1，幾乎看不見：--brand-ring 在深色改用網站
+ * 的 --navy-200 #B9C7E3（對同一背景 10.33:1）。紅線維持 #C8102E 不變（見
+ * BrandMark.tsx）。*/
+@media (prefers-color-scheme: dark) {
+  :root[data-accent="navy"]:not([data-theme="light"]) {
+    --ink-900: #f0f3f8;
+    --ink-800: #5677ba;
+    --ink-700: #c9d2e3;
+    --ink-600: #9aa7bf;
+    --ink-500: #8896b1;
+    --ink-400: #5c6880;
+    --line: #233240;
+    --line-soft: #1c2934;
+    --accent-soft: #1e2c38;
+    --canvas: #0d1620;
+    --surface-2: #16222c;
+    --rail: #121b24;
+    --surface: #111a22;
+    --on-accent: #ffffff;
+    --brand-ring: #B9C7E3;
+    --brand-water: #3F5F96;
+  }
+}
+
+:root[data-accent="navy"][data-theme="dark"] {
+  --ink-900: #f0f3f8;
+  --ink-800: #5677ba;
+  --ink-700: #c9d2e3;
+  --ink-600: #9aa7bf;
+  --ink-500: #8896b1;
+  --ink-400: #5c6880;
+  --line: #233240;
+  --line-soft: #1c2934;
+  --accent-soft: #1e2c38;
+  --canvas: #0d1620;
+  --surface-2: #16222c;
+  --rail: #121b24;
+  --surface: #111a22;
+  --on-accent: #ffffff;
+  --brand-ring: #B9C7E3;
+  --brand-water: #3F5F96;
+}
+
+/* 自訂色調 — user picks one accent color (Settings → 一般); we only retint
+ * the "brand" tone (ink-800, used for primary buttons/selected states)
+ * plus a couple of derived shades via color-mix(), leaving the rest of the
+ * neutral scale untouched so text hierarchy/contrast stays exactly as
+ * validated in "經典". */
+:root[data-accent="custom"] {
+  --ink-800: var(--custom-accent-color);
+  --ink-900: color-mix(in srgb, var(--custom-accent-color) 80%, black 20%);
+  --accent-soft: color-mix(in srgb, var(--custom-accent-color) 12%, white 88%);
+  --on-accent: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-accent="custom"]:not([data-theme="light"]) {
+    --ink-800: color-mix(in srgb, var(--custom-accent-color) 70%, white 30%);
+    --ink-900: color-mix(in srgb, var(--custom-accent-color) 55%, white 45%);
+    --accent-soft: color-mix(in srgb, var(--custom-accent-color) 18%, black 82%);
+  }
+}
+
+:root[data-accent="custom"][data-theme="dark"] {
+  --ink-800: color-mix(in srgb, var(--custom-accent-color) 70%, white 30%);
+  --ink-900: color-mix(in srgb, var(--custom-accent-color) 55%, white 45%);
+  --accent-soft: color-mix(in srgb, var(--custom-accent-color) 18%, black 82%);
+}
+
+html {
+  font-size: calc(16px * var(--font-scale));
+}
+
+body {
+  background-color: var(--canvas);
+  background-image: var(--bg-image);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+  color: var(--ink-700);
+  font-family: var(--font-ui);
+}

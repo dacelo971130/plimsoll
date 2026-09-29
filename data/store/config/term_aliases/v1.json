@@ -1,0 +1,17 @@
+{
+  "version": "v1",
+  "aliases": [
+    {
+      "canonical": "溫度上限",
+      "variants": ["最高溫度限值", "溫度上限值"],
+      "approved_by": "demo-seed",
+      "approved_at": "2026-08-23"
+    },
+    {
+      "canonical": "巡防艦",
+      "variants": ["巡防艦艇", "巡防艦隻"],
+      "approved_by": "demo-seed",
+      "approved_at": "2026-08-23"
+    }
+  ]
+}
