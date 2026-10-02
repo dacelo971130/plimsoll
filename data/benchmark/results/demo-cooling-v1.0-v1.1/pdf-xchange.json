@@ -1,0 +1,14 @@
+{
+  "tool": "pdf-xchange",
+  "display_name": "PDF-XChange Editor Plus／PRO — Compare Documents",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "Review → Compare Documents → 選第二份 PDF → 勾 Compare Text Only → 讀 Differences 面板",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機執行（Windows）",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

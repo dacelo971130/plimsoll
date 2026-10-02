@@ -1,0 +1,14 @@
+{
+  "tool": "aspose-web",
+  "display_name": "Aspose PDF Comparison（免費網頁版）",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "上傳兩份 PDF → Compare → View Differences／下載結果",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "上傳到 Aspose 伺服器，24 小時後刪除",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

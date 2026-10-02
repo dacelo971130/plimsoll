@@ -1,0 +1,14 @@
+{
+  "tool": "draftable-api",
+  "display_name": "Draftable API",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "REST 建立比較（left=舊、right=新）→ 取 JSON 變更 → 轉成結果 CSV",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "雲端 API（ISO 27001、SOC 2）或自架",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

@@ -26,10 +26,10 @@ deliberate, separate opt-in rather than automatic.
 
 from __future__ import annotations
 
-import os
 from typing import Protocol
 
 from backend.models.chain import ParameterPoint
+from backend.services.llm.credentials import NO_CREDENTIALS, PROVIDER_IDS, LlmCredentials, server_key, server_providers
 from backend.services.llm.schemas import (
     AliasCandidateSuggestion,
     DrawingRegionSuggestion,
@@ -96,64 +96,71 @@ class LlmProvider(Protocol):
 
 def get_llm_provider() -> LlmProvider | None:
     """Server-env-var path — returns None (never raises) when the semantic
-    layer can't run: no provider's SDK is installed, or none of
-    `ANTHROPIC_API_KEY`/`GEMINI_API_KEY`/`OPENAI_API_KEY` is set. All are
-    legitimate, expected states in a rules-first deployment — this is a
-    config/env check, not an error path. Checked in this priority order
-    when multiple are set (Anthropic first, since it's the original/default
-    integration); a real deployment normally only sets one."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        try:
-            import anthropic  # noqa: F401
-        except ImportError:
-            pass
-        else:
+    layer can't run: no provider's SDK is installed, or no real key is set.
+    All are legitimate, expected states in a rules-first deployment — this
+    is a config/env check, not an error path. PLIMSOLL_AI_PROVIDER pins one
+    provider; otherwise the first with a real key in this order (Anthropic
+    first, since it's the original/default integration). Example
+    placeholders copied from .env.example don't count as keys — see
+    credentials.server_key()."""
+    for provider_id in server_providers():
+        provider = _server_side(provider_id)
+        if provider is not None:
+            return provider
+    return None
+
+
+def _server_side(provider_id: str) -> LlmProvider | None:
+    if provider_id == "bedrock":
+        return _bedrock_provider(NO_CREDENTIALS)
+    try:
+        if provider_id == "anthropic":
             from backend.services.llm.anthropic_provider import AnthropicProvider
 
-            return AnthropicProvider()
-    if os.environ.get("GEMINI_API_KEY"):
-        try:
-            import google.genai  # noqa: F401
-        except ImportError:
-            pass
-        else:
+            return AnthropicProvider(api_key=server_key("anthropic"))
+        if provider_id == "gemini":
             from backend.services.llm.gemini_provider import GeminiProvider
 
-            return GeminiProvider(api_key=os.environ["GEMINI_API_KEY"])
-    if os.environ.get("OPENAI_API_KEY"):
-        try:
-            import openai  # noqa: F401
-        except ImportError:
-            pass
-        else:
-            from backend.services.llm.openai_provider import OpenAIProvider
+            return GeminiProvider(api_key=server_key("gemini"))
+        from backend.services.llm.openai_provider import OpenAIProvider
 
-            return OpenAIProvider(api_key=os.environ["OPENAI_API_KEY"])
-    return None
+        return OpenAIProvider(api_key=server_key("openai"))
+    except ImportError:  # that provider's SDK isn't installed
+        return None
+
+
+def _bedrock_provider(creds: LlmCredentials) -> LlmProvider | None:
+    from backend.services.llm.bedrock import resolve_bedrock_target
+    from backend.services.llm.bedrock_provider import BedrockProvider
+
+    target, _reason = resolve_bedrock_target(creds)
+    return BedrockProvider(target) if target is not None else None
 
 
 # P5 multi-provider support: Settings → AI 模型 lets a user pick a provider
 # and paste their OWN key, kept client-side in sessionStorage
 # (frontend/src/app/settings/AiModelTab.tsx) and sent per-request as
-# `X-Llm-Provider`/`X-Llm-Api-Key` headers — never persisted server-side,
-# never logged (see backend/api/*.py's `llm_credentials` header dependency).
-# "groq"/"bedrock" are intentionally absent — not implemented; selecting one
-# degrades to None (unavailable) exactly like an unset key would, never a
-# crash or a silent fall-through to a DIFFERENT provider the user didn't ask for.
-_REQUEST_SCOPED_PROVIDERS = ("anthropic", "gemini", "openai")
+# `X-Llm-*` headers — never persisted server-side, never logged (see
+# backend/api/llm_headers.py). An unknown provider id degrades to None
+# (unavailable) exactly like an unset key would, never a crash or a silent
+# fall-through to a DIFFERENT provider the user didn't ask for.
 
 
-def resolve_llm_provider(provider_id: str | None = None, api_key: str | None = None) -> LlmProvider | None:
-    """The request-scoped counterpart to `get_llm_provider()`. When both
-    `provider_id` and `api_key` are given (the frontend's BYOK headers),
-    THOSE win and construct a provider on the spot for this call only.
-    Falls back to `get_llm_provider()`'s server-env-var behavior when
-    either is missing, so a deployment that sets `ANTHROPIC_API_KEY` (etc.)
-    server-side still works with zero frontend involvement."""
-    if not provider_id or not api_key:
+def resolve_llm_provider(creds: LlmCredentials | None = None) -> LlmProvider | None:
+    """The request-scoped counterpart to `get_llm_provider()`. When the
+    frontend's BYOK headers name a provider and carry a key, THOSE win and
+    construct a provider on the spot for this call only. Falls back to
+    `get_llm_provider()`'s server-env-var behavior otherwise, so a
+    deployment that sets `ANTHROPIC_API_KEY` (etc.) server-side still works
+    with zero frontend involvement."""
+    creds = creds or NO_CREDENTIALS
+    if not creds.explicit:
         return get_llm_provider()
-    if provider_id not in _REQUEST_SCOPED_PROVIDERS:
+    provider_id, api_key = creds.provider_id, creds.api_key
+    if provider_id not in PROVIDER_IDS:
         return None
+    if provider_id == "bedrock":
+        return _bedrock_provider(creds)
     if provider_id == "anthropic":
         try:
             import anthropic  # noqa: F401

@@ -30,13 +30,21 @@ services:
       # (backend/services/llm/provider.py). Leave unset to run with rules-
       # only analysis; the app degrades gracefully either way. The client's
       # own BYOK key (Settings → AI 模型) is separate from these.
+      # Pins the server's provider (anthropic / gemini / openai / bedrock) so a
+      # stray key for another one can't win the default order.
+      - PLIMSOLL_AI_PROVIDER=${PLIMSOLL_AI_PROVIDER:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      # Bedrock: API key (bearer token) + region + model (backend/services/llm/bedrock.py).
+      - AWS_BEARER_TOKEN_BEDROCK=${AWS_BEARER_TOKEN_BEDROCK:-}
+      - AWS_REGION=${AWS_REGION:-}
+      - PLIMSOLL_BEDROCK_MODEL=${PLIMSOLL_BEDROCK_MODEL:-}
+      - PLIMSOLL_GEMINI_AGENT_MODEL=${PLIMSOLL_GEMINI_AGENT_MODEL:-}
       # Shared demo password (backend/api/demo_auth.py). Empty = gate off,
       # which is right for localhost only — set it before exposing the port
       # through a tunnel, or anyone with the URL can wipe every session.
-      - PLIMSOLL_DEMO_PASSWORD=${PLIMSOLL_DEMO_PASSWORD:-}
+      - PLIMSOLL_DEMO_PASSWORD=${PLIMSOLL_DEMO_PASSWORD:-plimsoll}
 
 volumes:
   plimsoll-data:

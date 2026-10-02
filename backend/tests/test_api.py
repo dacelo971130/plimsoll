@@ -268,9 +268,9 @@ def test_semantic_preview_forwards_llm_headers_to_resolve_llm_provider(monkeypat
     try:
         captured = {}
 
-        def fake_resolve(provider_id, api_key):
-            captured["provider_id"] = provider_id
-            captured["api_key"] = api_key
+        def fake_resolve(creds):
+            captured["provider_id"] = creds.provider_id
+            captured["api_key"] = creds.api_key
             return None  # unavailable is fine — we only care what args it was called with
 
         monkeypatch.setattr("backend.services.llm.provider.resolve_llm_provider", fake_resolve)
@@ -292,9 +292,9 @@ def test_semantic_preview_forwards_llm_headers_to_resolve_llm_provider(monkeypat
 def test_upload_forwards_llm_headers_to_resolve_ocr_provider(monkeypatch):
     captured = {}
 
-    def fake_resolve(provider_id, api_key):
-        captured["provider_id"] = provider_id
-        captured["api_key"] = api_key
+    def fake_resolve(creds):
+        captured["provider_id"] = creds.provider_id
+        captured["api_key"] = creds.api_key
         return None
 
     monkeypatch.setattr("backend.services.ocr.provider.resolve_ocr_provider", fake_resolve)

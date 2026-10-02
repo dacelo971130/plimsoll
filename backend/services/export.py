@@ -132,6 +132,11 @@ def build_appendix(session: dict, is_draft: bool, glossary: Glossary | None | ob
     if table.status != "approved":
         appendix.glossary_note = "詞彙表尚未經人工核准，本報告暫不附名詞解釋。"
         return appendix
+    if table.simulated:
+        # Switched on for the agent and help page, but a signed report is a
+        # record — no definitions an expert hasn't reviewed.
+        appendix.glossary_note = "目前的詞彙表是模擬版、尚未經專業人員審核，正式報告暫不附名詞解釋。"
+        return appendix
     corpus = _report_corpus(session, is_draft, appendix.pending)
     for entry in table.terms:
         names = [entry.term, *entry.aliases]

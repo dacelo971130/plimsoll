@@ -1,0 +1,14 @@
+{
+  "tool": "wps",
+  "display_name": "WPS Office（WPS PDF）— 文檔對比",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "WPS PDF → 文檔對比 → 選舊／新 PDF → 逐筆切換並抄錄",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "未說明（桌面程式）",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

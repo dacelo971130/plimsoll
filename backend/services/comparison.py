@@ -21,12 +21,11 @@ from __future__ import annotations
 
 import difflib
 import functools
-import math
 import re
-from collections import Counter
 from dataclasses import dataclass
 
 from backend.models.config_models import Ruleset
+from backend.services import text_similarity
 from backend.services.extraction import ExtractedDocument, PageContent
 
 RiskLevel = str  # 'High' | 'Medium' | 'Low' — see backend.models.config_models
@@ -343,73 +342,6 @@ def _page_ref(page: PageContent | None) -> PageRef:
     return PageRef(pdf_page=page.pdf_page, print_label=page.print_label, label_source=page.label_source)
 
 
-def _page_grams(page: PageContent) -> Counter[str]:
-    """Adjacent-token bigrams across the WHOLE page (not a fixed-length
-    prefix) — `_TOKEN_RE` reuses the same tokenizer as the step_order_change
-    flag above (Latin words / CJK chars, no dictionary segmenter). Uses
-    `lines_canonical` (W4), same reason as before: wording drift alone
-    shouldn't tank the match."""
-    tokens = _TOKEN_RE.findall("".join(page.lines_canonical))
-    return Counter(a + b for a, b in zip(tokens, tokens[1:]))
-
-
-PageVector = dict[str, float]
-
-
-def _page_vectors(pages: list[PageContent]) -> list[PageVector]:
-    """TF-IDF (bigram, corpus = every page passed in) vector per page,
-    L2-normalized — replaces the old fixed 6-line character prefix
-    (`_page_fingerprint`) entirely. Computed ONCE for the whole document
-    pair (call with old_pages + new_pages together) rather than recomputed
-    per (i, j) inside the O(m×n) alignment loop the old fingerprint was.
-
-    Real-document validation (SOLAS 2004→2020, docs/redesign/plimsoll-real-
-    document-smoketest-2026-09.html §6/§7 conflict 1, option 丙): the old
-    6-line prefix scored old p101 vs new p57 — same "emergency lighting
-    switchboard" regulation, rewritten from a bulleted list into prose — at
-    only 0.338 (below the 0.6 match threshold), because 2020's pages often
-    prepend an "Effective Date / For Ships Constructed" amendment-history
-    block that displaces the actual content out of the first 6 lines. The
-    whole-page, corpus-IDF-weighted signal here scores that same pair 0.601
-    (rank 1 among all candidates) — IDF weighting means the boilerplate/
-    common bigrams that dominate a short prefix comparison contribute little
-    here, and a rewritten-but-same-topic page still shares enough of its
-    RARE (hence highly-weighted) vocabulary bigrams to score highly."""
-    grams_per_page = [_page_grams(p) for p in pages]
-    doc_freq: Counter[str] = Counter()
-    for grams in grams_per_page:
-        doc_freq.update(grams.keys())
-    n_docs = len(pages)
-    vectors: list[PageVector] = []
-    for grams in grams_per_page:
-        # Smoothed IDF (scikit-learn's TfidfVectorizer default: ln((1+n)/(1+df)) + 1),
-        # not the textbook ln((1+n)/(1+df)) alone. Without the "+1" floor, a bigram
-        # that appears on EVERY page of the corpus scores idf=ln(1)=0 and is dropped
-        # entirely — harmless on a large corpus (SOLAS, 840 pages: no bigram is that
-        # universal), but catastrophic on a small one: comparing a single old page to
-        # its single new counterpart makes the corpus exactly {old, new}, so the
-        # shared wording that PROVES they're the same page (df=2=n_docs) vanishes and
-        # only the few differing bigrams survive, inverting the score. The +1 keeps a
-        # baseline weight for universal terms so short documents (or single-page
-        # comparisons) don't collapse to comparing noise.
-        weighted = {g: count * (math.log((n_docs + 1) / (doc_freq[g] + 1)) + 1.0) for g, count in grams.items()}
-        norm = math.sqrt(sum(w * w for w in weighted.values())) or 1.0
-        vectors.append({g: w / norm for g, w in weighted.items()})
-    return vectors
-
-
-def _cosine(a: PageVector, b: PageVector) -> float:
-    if not a or not b:
-        # No signal on at least one side (e.g. a scanned page with zero
-        # extractable tokens) — never auto-match on "both empty" (docs/
-        # redesign/plimsoll-real-document-smoketest-2026-09.html §4: two
-        # blank pages used to compare as identical, hiding a real change).
-        return 0.0
-    if len(a) > len(b):
-        a, b = b, a
-    return sum(w * b.get(g, 0.0) for g, w in a.items())
-
-
 def _align_pages(old_pages: list[PageContent], new_pages: list[PageContent]) -> list[tuple[int | None, int | None]]:
     """Global (Needleman-Wunsch-style) alignment over page fingerprints —
     replaces naive positional zip so inserting/deleting a page anywhere in
@@ -427,10 +359,11 @@ def _align_pages(old_pages: list[PageContent], new_pages: list[PageContent]) -> 
     m, n = len(old_pages), len(new_pages)
     # One shared corpus (old + new together) so the IDF weighting reflects
     # the whole document pair, not each side separately; computed once, not
-    # per (i, j) — see _page_vectors.
-    all_vectors = _page_vectors(old_pages + new_pages)
+    # per (i, j) — see text_similarity.build_vectors.
+    all_texts = ["".join(p.lines_canonical) for p in old_pages + new_pages]
+    all_vectors = text_similarity.build_vectors(all_texts)
     old_vecs, new_vecs = all_vectors[:m], all_vectors[m:]
-    sim = [[_cosine(old_vecs[i], new_vecs[j]) for j in range(n)] for i in range(m)]
+    sim = [[text_similarity.cosine(old_vecs[i], new_vecs[j]) for j in range(n)] for i in range(m)]
 
     dp = [[0.0] * (n + 1) for _ in range(m + 1)]
     for i in range(1, m + 1):
@@ -479,15 +412,16 @@ def _align_pages(old_pages: list[PageContent], new_pages: list[PageContent]) -> 
 #   spot-checked as genuine (same section/table, renumbered or reworded).
 #   Lowering this further didn't recover more real pages on CCS (the
 #   remaining gap is almost entirely pages with zero extractable tokens,
-#   which _cosine deliberately never matches — see its docstring) so there
-#   was nothing to trade the higher false-match risk against.
+#   which text_similarity.cosine deliberately never matches — see its
+#   docstring) so there was nothing to trade the higher false-match risk
+#   against.
 _PAGE_RECONCILE_THRESHOLD = 0.4
 
 
 def _reconcile_shifted_pages(
     pairs: list[tuple[int | None, int | None]],
-    old_vecs: list[PageVector],
-    new_vecs: list[PageVector],
+    old_vecs: list[text_similarity.Vector],
+    new_vecs: list[text_similarity.Vector],
 ) -> list[tuple[int | None, int | None]]:
     """Second, lower-threshold pass over pages the primary alignment left
     unmatched (i.e. a `(idx, None)`/`(None, idx)` entry above) — recovers
@@ -521,7 +455,7 @@ def _reconcile_shifted_pages(
         old_vec = old_vecs[pairs[oi][0]]
         for ni in leftover_new:
             new_vec = new_vecs[pairs[ni][1]]
-            sim = _cosine(old_vec, new_vec)
+            sim = text_similarity.cosine(old_vec, new_vec)
             if sim >= _PAGE_RECONCILE_THRESHOLD:
                 candidates.append((sim, oi, ni))
     if not candidates:
@@ -598,12 +532,31 @@ def _whole_page_record(*, counter: int, page: PageContent, change_type: str, rul
     )
 
 
-def compare_documents(old: ExtractedDocument, new: ExtractedDocument, ruleset: Ruleset) -> list[DifferenceRecord]:
+def align_pages(old: ExtractedDocument, new: ExtractedDocument) -> list[tuple[int | None, int | None]]:
+    """Public entry point for W3 page alignment alone, with no line-level
+    diffing or classification — for a caller that needs to know which
+    physical page corresponds to which without paying for a full
+    compare_documents() run (e.g. session_store.process_upload(), which
+    persists this into pages.json's page_alignment for the source viewer's
+    page-by-page navigation — see that field's own docstring for why the
+    viewer needs it at all). compare_documents() calls this internally when
+    `page_pairs` isn't passed in, so a caller that already computed it can
+    hand it back via that parameter to avoid recomputing."""
+    return _align_pages(old.pages, new.pages)
+
+
+def compare_documents(
+    old: ExtractedDocument,
+    new: ExtractedDocument,
+    ruleset: Ruleset,
+    *,
+    page_pairs: list[tuple[int | None, int | None]] | None = None,
+) -> list[DifferenceRecord]:
     records: list[DifferenceRecord] = []
     seen_pairs: set[tuple[str | None, str | None]] = set()
     counter = 0
 
-    for old_idx, new_idx in _align_pages(old.pages, new.pages):
+    for old_idx, new_idx in page_pairs if page_pairs is not None else _align_pages(old.pages, new.pages):
         if old_idx is not None and new_idx is not None:
             old_page, new_page = old.pages[old_idx], new.pages[new_idx]
             # §27a page-hash short-circuit — on the W4 canonical view: a page

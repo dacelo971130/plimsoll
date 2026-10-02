@@ -261,7 +261,7 @@
       "term": "簽核",
       "category": "覆核與簽核",
       "definition": "匯出報告時填寫覆核人姓名、核准角色、報告編號與部門，系統會留下一筆簽核紀錄。",
-      "sources": ["HANDOFF.md（P4 簽核表單與 EXPORT_SIGNOFF）", "backend/services/session_store.py（export_session）"],
+      "sources": ["README.md（目前進度 P4：簽核表單與 EXPORT_SIGNOFF 稽核事件）", "backend/services/session_store.py（export_session）"],
       "status": "draft"
     },
     {

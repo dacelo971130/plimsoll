@@ -1,0 +1,14 @@
+{
+  "tool": "spellbook",
+  "display_name": "Spellbook — Compare Documents",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "新版 PDF 轉 .docx 在 Word 開啟 → Spellbook → Compare Documents → 上傳舊版當參考 → 抄錄每筆 Important／Notable",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "Spellbook 雲端",
+  "risk_mapping": "有：每筆差異標 Important 或 Notable",
+  "notes": ""
+}

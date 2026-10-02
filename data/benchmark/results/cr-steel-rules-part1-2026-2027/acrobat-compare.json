@@ -1,0 +1,14 @@
+{
+  "tool": "acrobat-compare",
+  "display_name": "Adobe Acrobat Pro — 比較檔案",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "所有工具 → 比較檔案 → 指定舊／新 → 比較；照 Compare Results 摘要逐筆抄錄",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機執行",
+  "risk_mapping": "不分級（只分文字／圖片／註解／格式）",
+  "notes": ""
+}

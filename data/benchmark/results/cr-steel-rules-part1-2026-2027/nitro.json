@@ -1,0 +1,14 @@
+{
+  "tool": "nitro",
+  "display_name": "Nitro PDF Pro — Compare Documents",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "Review → Compare Documents → 選原檔與修改檔 → Content Comparison；從標示結果逐筆抄錄",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機執行",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

@@ -1,0 +1,14 @@
+{
+  "tool": "kimi",
+  "display_name": "Kimi",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "上傳兩份 PDF，貼 templates/llm_prompt.md，要求匯出 .xlsx",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "Moonshot 雲端",
+  "risk_mapping": "未確認（產品頁搜尋摘要提到標示合約風險點）",
+  "notes": ""
+}

@@ -1,0 +1,14 @@
+{
+  "tool": "apryse",
+  "display_name": "Apryse SDK — Semantic Compare／Overlay",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "PDFDoc.HighlightTextDiff(舊, 新) → 逐一讀標註的類型與文字 → 寫成 CSV",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機或伺服器執行",
+  "risk_mapping": "不分級（只分插入／刪除／編輯）",
+  "notes": ""
+}

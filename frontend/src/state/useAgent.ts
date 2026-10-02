@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { askAgent, getAgentLatest, getAgentRun, getAgentStatus, startAgentBriefing } from '../lib/api';
+import { LLM_SETTINGS_EVENT } from '../lib/llmProviders';
 import type { AgentAnswer, AgentBriefing, AgentItem, AgentRun, AgentStatus, AgentSuggestion } from '../types';
 
 const POLL_MS = 1000;
@@ -29,6 +30,22 @@ export function useAgent(sessionId: string | null) {
       .then(setStatus)
       .catch(() => setStatus({ available: false, reason: '無法確認 Agent 狀態。', model: '' }));
   }, []);
+
+  // Another provider, model, region or key in 設定 → AI 模型 can change
+  // whether the agent runs at all, so ask again — debounced, since the key
+  // field fires on every keystroke.
+  useEffect(() => {
+    let timer: number | undefined;
+    const onChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(refreshStatus, 400);
+    };
+    window.addEventListener(LLM_SETTINGS_EVENT, onChange);
+    return () => {
+      window.removeEventListener(LLM_SETTINGS_EVENT, onChange);
+      window.clearTimeout(timer);
+    };
+  }, [refreshStatus]);
 
   useEffect(() => {
     setBriefing(null);

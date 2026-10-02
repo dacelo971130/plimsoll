@@ -10,6 +10,7 @@ import pytest
 
 from backend.services.comparison import DifferenceRecord, PageRef, SourceSpan
 from backend.services.llm.provider import LlmUnavailable, get_llm_provider, resolve_llm_provider
+from backend.services.llm.credentials import LlmCredentials
 from backend.services.llm.residual import (
     edit_distance_ratio,
     enrich_differences_with_semantic_suggestions,
@@ -103,7 +104,10 @@ def _diff(rule_id="default", change_type="修改", old_text="舊的說明文字�
 # --------------------------------------------------------------------------
 
 def _clear_all_provider_env(monkeypatch):
-    for var in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"):
+    for var in (
+        "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY",
+        "AWS_BEARER_TOKEN_BEDROCK", "AWS_REGION", "AWS_DEFAULT_REGION", "PLIMSOLL_BEDROCK_MODEL", "PLIMSOLL_AI_PROVIDER",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -153,22 +157,22 @@ def test_get_llm_provider_prefers_anthropic_when_multiple_keys_set(monkeypatch):
 
 def test_resolve_llm_provider_with_explicit_anthropic_credentials(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    provider = resolve_llm_provider("anthropic", "sk-ant-not-real")
+    provider = resolve_llm_provider(LlmCredentials("anthropic", "sk-ant-not-real"))
     assert provider is not None
     assert provider.provider_name == "anthropic"
 
 
 def test_resolve_llm_provider_with_explicit_gemini_credentials(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    provider = resolve_llm_provider("gemini", "not-a-real-key")
+    provider = resolve_llm_provider(LlmCredentials("gemini", "not-a-real-key"))
     assert provider is not None
     assert provider.provider_name == "gemini"
-    assert provider.model_id == "gemini-2.5-flash"
+    assert provider.model_id == "gemini-3.8-flash"
 
 
 def test_resolve_llm_provider_with_explicit_openai_credentials(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    provider = resolve_llm_provider("openai", "not-a-real-key")
+    provider = resolve_llm_provider(LlmCredentials("openai", "not-a-real-key"))
     assert provider is not None
     assert provider.provider_name == "openai"
     assert provider.model_id == "gpt-4o"
@@ -176,22 +180,23 @@ def test_resolve_llm_provider_with_explicit_openai_credentials(monkeypatch):
 
 def test_resolve_llm_provider_unknown_provider_id_degrades_to_none(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    assert resolve_llm_provider("groq", "some-key") is None
-    assert resolve_llm_provider("bedrock", "some-key") is None
+    assert resolve_llm_provider(LlmCredentials("groq", "some-key")) is None
+    # Bedrock without a region can't route anywhere — unavailable, not a guess.
+    assert resolve_llm_provider(LlmCredentials("bedrock", "some-key")) is None
 
 
 def test_resolve_llm_provider_falls_back_to_env_when_headers_missing(monkeypatch):
     _clear_all_provider_env(monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-not-real")
-    provider = resolve_llm_provider(None, None)
+    provider = resolve_llm_provider(LlmCredentials())
     assert provider is not None
     assert provider.provider_name == "anthropic"
 
 
 def test_resolve_llm_provider_requires_both_id_and_key(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    assert resolve_llm_provider("gemini", None) is None
-    assert resolve_llm_provider(None, "some-key") is None
+    assert resolve_llm_provider(LlmCredentials("gemini", None)) is None
+    assert resolve_llm_provider(LlmCredentials(None, "some-key")) is None
 
 
 # --------------------------------------------------------------------------

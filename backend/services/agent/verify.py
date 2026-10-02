@@ -31,6 +31,7 @@ from backend.services.agent.tools import UNSTATED_REASON, SessionContext, parame
 
 OUT_OF_SCOPE_TEXT = "我只能回答與目前載入的船舶技術文件有關的問題。"
 NOT_IN_DOCUMENTS_TEXT = "文件中找不到依據，已列為待確認。"
+UNVERIFIED_TEXT = "AI 的回答有內容和引用的原文對不上，為避免誤導已改列待確認。"
 PRIORITY_LIMIT = 5
 
 _FIELD_LABEL = {"title": "文件名稱", "version": "版本號", "date": "發布日期", "applicable_equipment": "適用設備"}
@@ -52,13 +53,18 @@ _NAME_PATTERN = re.compile("|".join(re.escape(k) for k in sorted(_NAME_REPLACEME
 # Numerals that are structure, not facts from the document: difference ids,
 # page refs, version labels, ordinal/count phrases.
 _STRUCTURAL = re.compile(
+    # ...plus list numbering at the start of a line (「1. 」「2、」) — answers
+    # come as lists, and the item number is not a claim about the document.
     r"[Dd]\d+|[pP]\.\s*\d+|[vV]\d+(?:\.\d+)*|第\s*\d+\s*[頁筆版步項章節條]|\d+\s*[筆項]|\d+\s*／\s*\d+"
+    r"|(?m:^\s*\d+\s*[.、．)）](?!\d))"
 )
 _UNITS = (
     "°C|°F|MPa|kPa|bar|rpm|kW|mm|cm|km|kg|ml|Hz|Pa|%|m|g|L|V|A|"
     "小時|分鐘|個月|秒|天|日|週|周|月|年|次|度"
 )
 _NUMBER = re.compile(rf"(?<![\d.])(\d+(?:\.\d+)?)\s*({_UNITS})?")
+# One sentence of an answer, keeping its end mark (or line break, for lists).
+_SENTENCE = re.compile(r"[^。！？!?\n]+[。！？!?]?\n?|\n")
 
 
 def _norm(text: str | None) -> str:
@@ -147,24 +153,35 @@ class Verifier:
     def _headings(self, ids: list[str], session_id: str | None = None) -> list[str]:
         return [(self._difference(session_id, i) or {}).get("affected") or "" for i in ids]
 
-    def _numbers_ok(self, texts: list[str], citations: list[dict], headings: list[str]) -> bool:
-        # Section headings of the differences involved count as cited text
-        # too (a heading like 「3. 冷卻溫度檢查」 names a section, not a fact).
-        cited_headings = [
-            (self._difference(c["session_id"], c["difference_id"]) or {}).get("affected") or ""
-            for c in citations
-            if c["difference_id"]
-        ]
-        allowed = _norm(" ".join(c["quote"] for c in citations) + " " + " ".join([*headings, *cited_headings]))
+    def _unmatched_number(self, texts: list[str], citations: list[dict], headings: list[str], *, also_allowed: str = "") -> str | None:
+        """The first number (with its unit) in `texts` that none of the cited
+        quotes contains, or None. Also counted as cited: each cited
+        difference's section heading (「3. 冷卻溫度檢查」 names a section, not a
+        fact) and its full old and new text — citing one side of D01 while
+        saying 「從 85°C 改為 80°C」 is grounded, both numbers are D01's own
+        (2026-10-02: an otherwise supported summary was withheld for exactly
+        that) — and `also_allowed`, so an answer may repeat the question's
+        own numbers (「五分鐘」→「5 分鐘」)."""
+        cited_text: list[str] = []
+        for c in citations:
+            if not c["difference_id"]:
+                continue
+            d = self._difference(c["session_id"], c["difference_id"]) or {}
+            cited_text += [d.get("affected") or "", (d.get("old") or {}).get("text") or "", (d.get("new") or {}).get("text") or ""]
+        allowed = _norm(" ".join(c["quote"] for c in citations) + " " + " ".join([*headings, *cited_text, also_allowed]))
         for text in texts:
             for match in _NUMBER.finditer(_STRUCTURAL.sub(" ", text.replace("℃", "°C"))):
                 number, unit = match.group(1), match.group(2)
                 needle = _norm(number + (unit or ""))
-                found = re.search(rf"(?<![\d.]){re.escape(needle)}(?!\d)", allowed) is not None
-                if not found:
-                    self.stats["numbers_rejected"] += 1
-                    return False
-        return True
+                if re.search(rf"(?<![\d.]){re.escape(needle)}(?!\d)", allowed) is None:
+                    return (number + (unit or "")).strip()
+        return None
+
+    def _numbers_ok(self, texts: list[str], citations: list[dict], headings: list[str]) -> bool:
+        if self._unmatched_number(texts, citations, headings) is None:
+            return True
+        self.stats["numbers_rejected"] += 1
+        return False
 
     def _known_ids(self, ids: list[str]) -> list[str]:
         known = [i for i in ids if self.ctx.difference(i) is not None]
@@ -177,7 +194,9 @@ class Verifier:
         self.stats[counter] += 1
         pending.append({"topic": topic, "reason": reason})
 
-    def _claim(self, pending: list[dict], topic: str, texts: list[str], citations: list[Citation], headings: list[str]) -> list[dict] | None:
+    def _claim(
+        self, pending: list[dict], topic: str, texts: list[str], citations: list[Citation], headings: list[str], *, also_allowed: str = ""
+    ) -> list[dict] | None:
         """Shared gate for one claim: valid citations required, numbers must
         match them. Returns the kept citations, or None after moving the
         claim to 待確認."""
@@ -185,8 +204,10 @@ class Verifier:
         if not kept:
             self._to_pending(pending, topic, "引用無法在原文中逐字找到", counter="claims_to_pending")
             return None
-        if not self._numbers_ok(texts, kept, headings):
-            self._to_pending(pending, topic, "數字或單位與引用的原文不一致", counter="claims_to_pending")
+        bad = self._unmatched_number(texts, kept, headings, also_allowed=also_allowed)
+        if bad is not None:
+            self.stats["numbers_rejected"] += 1
+            self._to_pending(pending, topic, f"數字或單位與引用的原文不一致（{bad}）", counter="claims_to_pending")
             return None
         return kept
 
@@ -198,7 +219,8 @@ class Verifier:
                 continue
             seen.add(term)
             if self.glossary is None:
-                self._to_pending(pending, term, "目前沒有詞彙表", counter="terms_to_pending")
+                # Nothing a reviewer can act on — just count it.
+                self.stats["terms_without_glossary"] += 1
                 continue
             if self.glossary.status != "approved":
                 self._to_pending(pending, term, "詞彙表尚未經人工核准", counter="terms_to_pending")
@@ -209,7 +231,10 @@ class Verifier:
             elif match.status != "approved":
                 self._to_pending(pending, term, "這個名詞的定義還沒定案", counter="terms_to_pending")
             else:
-                entries.append({"term": match.term, "definition": match.definition})
+                entry = {"term": match.term, "definition": match.definition}
+                if self.glossary.simulated:
+                    entry["simulated"] = True  # the UI labels it 模擬版
+                entries.append(entry)
         return entries
 
     def document_warnings(self) -> list[dict]:
@@ -366,14 +391,56 @@ class Verifier:
             return self._answer("out_of_scope", OUT_OF_SCOPE_TEXT, [], [], [])
 
         if raw.answer_type == "answer":
-            text = self.scrub(raw.text)
-            kept = self._claim(pending, question, [text], raw.citations, [])
-            if kept is not None:
-                return self._answer("answer", text, kept, pending, glossary)
-            self.stats["answer_downgraded"] += 1
-        else:
-            self._to_pending(pending, question, "文件中找不到依據", counter="claims_to_pending")
+            return self._checked_answer(raw, question, pending, glossary)
+        self._to_pending(pending, question, "文件中找不到依據", counter="claims_to_pending")
         return self._answer("not_in_documents", NOT_IN_DOCUMENTS_TEXT, [], pending, glossary)
+
+    def _checked_answer(self, raw: AgentAnswer, question: str, pending: list[dict], glossary: list[dict]) -> dict:
+        """Sentence by sentence (2026-10-02: withholding a whole supported
+        summary over one number told the reviewer nothing). A sentence whose
+        number isn't in the cited text is taken out and listed under 待確認
+        with the number; the rest is shown. Without one valid citation, or
+        with nothing left, the answer is withheld as before."""
+        kept = self.citations(raw.citations)
+        if not kept:
+            self._to_pending(pending, question, "引用無法在原文中逐字找到", counter="claims_to_pending")
+            self.stats["answer_downgraded"] += 1
+            return self._answer("unverified", UNVERIFIED_TEXT, [], pending, glossary)
+        shown: list[str] = []
+        withheld = 0
+        for sentence in _SENTENCE.findall(self.scrub(raw.text)):
+            bad = self._unmatched_number([sentence], kept, [], also_allowed=question)
+            if bad is None:
+                shown.append(sentence)
+                continue
+            withheld += 1
+            self.stats["numbers_rejected"] += 1
+            self._to_pending(pending, sentence.strip()[:80], f"「{bad}」在引用的原文裡找不到，這句沒有顯示", counter="claims_to_pending")
+        text = "".join(shown).strip()
+        if not text:
+            self.stats["answer_downgraded"] += 1
+            return self._answer("unverified", UNVERIFIED_TEXT, [], pending, glossary)
+        result = self._answer("answer", text, kept, pending, glossary)
+        if withheld:
+            result["withheld"] = withheld
+        return result
+
+    def answer_problem(self, raw: AgentAnswer, question: str) -> str | None:
+        """What answer() would reject, worded as an instruction for the model
+        to fix it (runner.run_loop's `review`) — None when it would pass.
+        Use a throwaway Verifier: the checks still count into its stats."""
+        if raw.answer_type != "answer":
+            return None
+        kept = self.citations(raw.citations)
+        if not kept:
+            return "這個回答的引用都無法在原文中逐字找到。請用 read_page 或 get_difference 取得原文，quote 逐字照抄後再交出。"
+        bad = self._unmatched_number([self.scrub(raw.text)], kept, [], also_allowed=question)
+        if bad is not None:
+            return (
+                f"回答中的「{bad}」在引用的原文裡找不到。請改成原文的寫法、補上包含它的原文引用，"
+                "或拿掉這個數字，修正後再交出。"
+            )
+        return None
 
     def _answer(self, answer_type: str, text: str, citations: list[dict], pending: list[dict], glossary: list[dict]) -> dict:
         return {

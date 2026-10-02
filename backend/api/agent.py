@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 from backend.api.llm_headers import llm_credentials
 from backend.services import session_store
 from backend.services.agent import runs
-from backend.services.agent.client import resolve_agent_client
-from backend.services.agent.runner import MODEL_ID
+from backend.services.agent.client import resolve_agent_backend
+from backend.services.llm.credentials import LlmCredentials
 
 router = APIRouter(prefix="/api", tags=["agent"])
 
@@ -26,26 +26,28 @@ def _require_session(session_id: str) -> None:
         raise HTTPException(status_code=404, detail="找不到這次比對。")
 
 
-def _client_or_409(creds: tuple[str | None, str | None]):
-    client, reason = resolve_agent_client(*creds)
-    if client is None:
+def _backend_or_409(llm: LlmCredentials):
+    backend, reason = resolve_agent_backend(llm)
+    if backend is None:
         raise HTTPException(status_code=409, detail=reason)
-    return client
+    return backend
 
 
 @router.get("/agent/status")
-def agent_status(creds: tuple[str | None, str | None] = Depends(llm_credentials)) -> dict:
+def agent_status(llm: LlmCredentials = Depends(llm_credentials)) -> dict:
     """Lets the UI show the Agent entry only when it can actually run
     (不做假的) — no disabled button standing in for a missing key."""
-    client, reason = resolve_agent_client(*creds)
-    return {"available": client is not None, "reason": reason, "model": MODEL_ID}
+    backend, reason = resolve_agent_backend(llm)
+    if backend is None:
+        return {"available": False, "reason": reason, "model": "", "provider": None}
+    return {"available": True, "reason": None, "model": backend.model, "provider": backend.provider}
 
 
-def _start(session_id: str, kind: runs.RunKind, creds, question: str | None = None) -> dict:
+def _start(session_id: str, kind: runs.RunKind, llm: LlmCredentials, question: str | None = None) -> dict:
     _require_session(session_id)
-    client = _client_or_409(creds)
+    backend = _backend_or_409(llm)
     try:
-        run = runs.start_run(session_id, kind, client, question)
+        run = runs.start_run(session_id, kind, backend, question)
     except runs.RunConflict as conflict:
         if kind == "briefing":
             # Same button pressed twice: hand back the run already going
@@ -56,16 +58,16 @@ def _start(session_id: str, kind: runs.RunKind, creds, question: str | None = No
 
 
 @router.post("/sessions/{session_id}/agent/briefing", status_code=202)
-def start_briefing(session_id: str, creds: tuple[str | None, str | None] = Depends(llm_credentials)) -> dict:
-    return _start(session_id, "briefing", creds)
+def start_briefing(session_id: str, llm: LlmCredentials = Depends(llm_credentials)) -> dict:
+    return _start(session_id, "briefing", llm)
 
 
 @router.post("/sessions/{session_id}/agent/questions", status_code=202)
-def ask_question(session_id: str, payload: QuestionRequest, creds: tuple[str | None, str | None] = Depends(llm_credentials)) -> dict:
+def ask_question(session_id: str, payload: QuestionRequest, llm: LlmCredentials = Depends(llm_credentials)) -> dict:
     question = payload.question.strip()
     if not question:
         raise HTTPException(status_code=422, detail="問題不可為空白。")
-    return _start(session_id, "question", creds, question)
+    return _start(session_id, "question", llm, question)
 
 
 @router.get("/sessions/{session_id}/agent/runs/{run_id}")

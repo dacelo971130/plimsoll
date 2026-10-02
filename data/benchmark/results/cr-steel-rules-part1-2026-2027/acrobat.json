@@ -1,0 +1,14 @@
+{
+  "tool": "acrobat",
+  "display_name": "工具全名與功能名，例如「Adobe Acrobat Pro — 比較檔案」",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "比較模式、是否忽略格式／頁首頁尾、LLM 用的模型與完整提示詞等，要能讓別人照做一次",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機執行，或上傳到哪個雲端服務",
+  "risk_mapping": "工具不分級就寫「不分級」；有分級就寫它的等級怎麼對應到 High/Medium/Low",
+  "notes": ""
+}

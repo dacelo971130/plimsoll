@@ -1,0 +1,13 @@
+{
+  "tool": "plimsoll",
+  "display_name": "Plimsoll（本系統）",
+  "kind": "ours",
+  "tool_version": "7160fb9",
+  "run_date": "2026-10-01T21:02:37+08:00",
+  "run_by": "scripts/accuracy_bench.py run-plimsoll",
+  "settings": "analysis_mode=rules_first，ruleset v2，term_aliases v1，LLM／OCR 關閉",
+  "runtime_seconds": 0.05,
+  "cost_note": "未呼叫任何模型",
+  "data_handling": "本機執行，文件不離開這台電腦",
+  "risk_mapping": "ai_risk 原值（High/Medium/Low）"
+}

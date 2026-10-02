@@ -34,10 +34,10 @@ function DiffLink({ id, onFocus }: { id: string; onFocus: (id: string) => void }
   );
 }
 
-export function PendingList({ pending }: { pending: AgentPending[] }) {
+export function PendingList({ pending, large = false }: { pending: AgentPending[]; large?: boolean }) {
   if (pending.length === 0) return null;
   return (
-    <ul className="space-y-1 text-[12px]">
+    <ul className={`space-y-1 ${large ? 'text-[14px]' : 'text-[12px]'}`}>
       {pending.map((p, i) => (
         <li key={i} className="rounded-md border border-med-200 bg-med-50 px-2 py-1 text-med-700">
           <span className="font-medium">{p.topic}</span>・{p.reason}
@@ -47,13 +47,20 @@ export function PendingList({ pending }: { pending: AgentPending[] }) {
   );
 }
 
-export function GlossaryList({ entries }: { entries: AgentGlossaryEntry[] }) {
+export function GlossaryList({ entries, large = false }: { entries: AgentGlossaryEntry[]; large?: boolean }) {
   if (entries.length === 0) return null;
   return (
-    <dl className="space-y-1 text-[12px]">
+    <dl className={`space-y-1 ${large ? 'text-[14px]' : 'text-[12px]'}`}>
       {entries.map((g) => (
         <div key={g.term}>
-          <dt className="font-medium text-ink-800">{g.term}</dt>
+          <dt className="font-medium text-ink-800">
+            {g.term}
+            {g.simulated && (
+              <span className="ml-1.5 rounded bg-med-50 px-1 py-px align-middle text-[10.5px] font-normal text-med-700" title="模擬版詞彙表的定義，尚未經專業人員審核">
+                模擬版
+              </span>
+            )}
+          </dt>
           <dd className="text-ink-600">{g.definition}</dd>
         </div>
       ))}

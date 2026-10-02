@@ -14,9 +14,9 @@ behavior instead of a broken install.
 
 from __future__ import annotations
 
-import os
 from typing import Protocol
 
+from backend.services.llm.credentials import NO_CREDENTIALS, PROVIDER_IDS, LlmCredentials, server_key, server_providers
 from backend.services.ocr.schemas import OcrPageResult
 
 
@@ -37,52 +37,57 @@ class OcrProvider(Protocol):
 def get_ocr_provider() -> OcrProvider | None:
     """Server-env-var path — returns None (never raises) when OCR can't
     run: no provider SDK installed, or none of `ANTHROPIC_API_KEY`/
-    `GEMINI_API_KEY`/`OPENAI_API_KEY` is set. A rules-first deployment with
-    no AI configured still works, it just keeps flagging scanned pages
-    instead of reading them."""
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        try:
-            import anthropic  # noqa: F401
-        except ImportError:
-            pass
-        else:
-            from backend.services.ocr.claude_vision_provider import ClaudeVisionOcrProvider
-
-            return ClaudeVisionOcrProvider()
-    if os.environ.get("GEMINI_API_KEY"):
-        try:
-            import google.genai  # noqa: F401
-        except ImportError:
-            pass
-        else:
-            from backend.services.llm.gemini_provider import GeminiOcrProvider
-
-            return GeminiOcrProvider(api_key=os.environ["GEMINI_API_KEY"])
-    if os.environ.get("OPENAI_API_KEY"):
-        try:
-            import openai  # noqa: F401
-        except ImportError:
-            pass
-        else:
-            from backend.services.llm.openai_provider import OpenAIOcrProvider
-
-            return OpenAIOcrProvider(api_key=os.environ["OPENAI_API_KEY"])
+    `GEMINI_API_KEY`/`OPENAI_API_KEY`/`AWS_BEARER_TOKEN_BEDROCK` is set. A
+    rules-first deployment with no AI configured still works, it just keeps
+    flagging scanned pages instead of reading them."""
+    for provider_id in server_providers():
+        provider = _server_side(provider_id)
+        if provider is not None:
+            return provider
     return None
 
 
-_REQUEST_SCOPED_PROVIDERS = ("anthropic", "gemini", "openai")
+def _server_side(provider_id: str) -> OcrProvider | None:
+    if provider_id == "bedrock":
+        return _bedrock_ocr(NO_CREDENTIALS)
+    try:
+        if provider_id == "anthropic":
+            from backend.services.ocr.claude_vision_provider import ClaudeVisionOcrProvider
+
+            return ClaudeVisionOcrProvider(api_key=server_key("anthropic"))
+        if provider_id == "gemini":
+            from backend.services.llm.gemini_provider import GeminiOcrProvider
+
+            return GeminiOcrProvider(api_key=server_key("gemini"))
+        from backend.services.llm.openai_provider import OpenAIOcrProvider
+
+        return OpenAIOcrProvider(api_key=server_key("openai"))
+    except ImportError:
+        return None
 
 
-def resolve_ocr_provider(provider_id: str | None = None, api_key: str | None = None) -> OcrProvider | None:
+def _bedrock_ocr(creds: LlmCredentials) -> OcrProvider | None:
+    from backend.services.llm.bedrock import resolve_bedrock_target
+    from backend.services.llm.bedrock_provider import BedrockOcrProvider
+
+    target, _reason = resolve_bedrock_target(creds)
+    return BedrockOcrProvider(target) if target is not None else None
+
+
+def resolve_ocr_provider(creds: LlmCredentials | None = None) -> OcrProvider | None:
     """Request-scoped counterpart to `get_ocr_provider()` — mirrors
     backend.services.llm.provider.resolve_llm_provider() exactly, using the
-    SAME provider_id/api_key pair a request carries (one BYOK selection
-    covers both the semantic layer and OCR, since both are "the AI backend
-    this user configured", not two independent choices)."""
-    if not provider_id or not api_key:
+    SAME credentials a request carries (one BYOK selection covers both the
+    semantic layer and OCR, since both are "the AI backend this user
+    configured", not two independent choices)."""
+    creds = creds or NO_CREDENTIALS
+    if not creds.explicit:
         return get_ocr_provider()
-    if provider_id not in _REQUEST_SCOPED_PROVIDERS:
+    provider_id, api_key = creds.provider_id, creds.api_key
+    if provider_id not in PROVIDER_IDS:
         return None
+    if provider_id == "bedrock":
+        return _bedrock_ocr(creds)
     if provider_id == "anthropic":
         try:
             import anthropic  # noqa: F401

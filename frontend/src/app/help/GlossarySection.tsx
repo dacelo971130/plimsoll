@@ -55,6 +55,12 @@ export function GlossarySection() {
 
   return (
     <div className="space-y-4">
+      {glossary.simulated && (
+        <p className="rounded-lg border border-med-200 bg-med-50 px-3 py-2 text-[12.5px] text-med-700">
+          這份名詞解釋是模擬版：船舶與輪機名詞的定義參考全國法規資料庫的法定用詞定義與國家教育研究院的標準譯名整理，尚未經專業人員審核。請以文件原文與覆核人判斷為準；正式簽核報告暫不附這些定義。
+        </p>
+      )}
+
       {glossary.status !== 'approved' && (
         <p className="rounded-lg border border-med-200 bg-med-50 px-3 py-2 text-[12.5px] text-med-700">
           這份名詞解釋還是草稿，尚未經人工審核。標示「待確認」的名詞，定義還沒有定案，請以文件原文與覆核人判斷為準。

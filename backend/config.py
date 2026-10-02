@@ -34,6 +34,9 @@ def _store_root() -> Path:
 
 STORE_ROOT = _store_root()
 CONFIG_ROOT = STORE_ROOT / "config"
+# Docker image's own glossary copy, outside the data volume (see Dockerfile);
+# absent outside Docker, where CONFIG_ROOT/glossary is the only copy.
+GLOSSARY_SEED_ROOT = REPO_ROOT / "seed" / "glossary"
 SESSIONS_ROOT = STORE_ROOT / "sessions"
 EXPORTS_ROOT = STORE_ROOT / "exports"
 INTEGRITY_ROOT = STORE_ROOT / ".integrity"

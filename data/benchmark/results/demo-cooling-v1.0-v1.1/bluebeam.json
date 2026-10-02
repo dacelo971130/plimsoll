@@ -1,0 +1,14 @@
+{
+  "tool": "bluebeam",
+  "display_name": "Bluebeam Revu — Compare Documents／Overlay",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "Document → Compare Documents → 舊 vs 新 → Markups List → Summary → CSV",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機執行",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

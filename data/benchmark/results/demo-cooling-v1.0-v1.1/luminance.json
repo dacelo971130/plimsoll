@@ -1,0 +1,14 @@
+{
+  "tool": "luminance",
+  "display_name": "Luminance（Lumi）",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "需企業試用；上傳兩版並要求版本比較",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "Luminance 雲端",
+  "risk_mapping": "宣稱會說明風險變化，未證實",
+  "notes": ""
+}

@@ -10,6 +10,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from backend.api.llm_headers import llm_credentials
+from backend.services.llm.credentials import LlmCredentials
 from backend.config import REPO_ROOT
 from backend.services import chain as chain_service
 from backend.services import session_store
@@ -94,8 +95,11 @@ def submit_chain_review(chain_id: str, payload: ChainReviewRequest):
     return {"data_origin": "computed", **result}
 
 
+# Bedrock has no Message Batches (BedrockProvider.supports_batch is False).
+NO_BATCH = "目前選擇的 AI 服務不支援批次語意分析，請改用單次比對的 AI 語意分析。"
+
 @router.post("/{chain_id}/semantic-preview/batch")
-def submit_semantic_batch(chain_id: str, creds: tuple[str | None, str | None] = Depends(llm_credentials)):
+def submit_semantic_batch(chain_id: str, llm: LlmCredentials = Depends(llm_credentials)):
     """P5 Message Batches — bulk residual re-analysis across every session
     in the chain, submitted as ONE Batch job (non-interactive; no
     fast-turnaround guarantee, poll GET .../batch/{batch_id} for status).
@@ -103,10 +107,11 @@ def submit_semantic_batch(chain_id: str, creds: tuple[str | None, str | None] = 
     false` (no batch submitted) means no provider is configured."""
     from backend.services.llm.provider import resolve_llm_provider
 
-    provider_id, api_key = creds
-    provider = resolve_llm_provider(provider_id, api_key)
+    provider = resolve_llm_provider(llm)
     if provider is None:
         return {"data_origin": "computed", "semantic_layer_available": False}
+    if not getattr(provider, "supports_batch", True):
+        raise HTTPException(status_code=409, detail=NO_BATCH)
     try:
         result = submit_batch(chain_id, provider)
     except session_store.SessionNotFound:
@@ -117,13 +122,14 @@ def submit_semantic_batch(chain_id: str, creds: tuple[str | None, str | None] = 
 
 
 @router.get("/{chain_id}/semantic-preview/batch/{batch_id}")
-def get_semantic_batch(chain_id: str, batch_id: str, creds: tuple[str | None, str | None] = Depends(llm_credentials)):
+def get_semantic_batch(chain_id: str, batch_id: str, llm: LlmCredentials = Depends(llm_credentials)):
     from backend.services.llm.provider import resolve_llm_provider
 
-    provider_id, api_key = creds
-    provider = resolve_llm_provider(provider_id, api_key)
+    provider = resolve_llm_provider(llm)
     if provider is None:
         raise HTTPException(status_code=409, detail="未設定 AI 金鑰，無法查詢批次狀態")
+    if not getattr(provider, "supports_batch", True):
+        raise HTTPException(status_code=409, detail=NO_BATCH)
     try:
         result = poll_batch(chain_id, batch_id, provider)
     except BatchNotFound:

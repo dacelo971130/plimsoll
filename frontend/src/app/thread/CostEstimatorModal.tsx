@@ -123,7 +123,7 @@ export function CostEstimatorModal({ sessionId, onClose }: CostEstimatorModalPro
               </table>
             </div>
             <p className="mt-2 text-[11px] text-ink-400">
-              token 數為字元數推算（中文字約 1 token／字，其餘約 4 字元／token），非各供應商實際 tokenizer 結果。Bedrock 僅供比較，尚未串接為可用的分析引擎。
+              token 數為字元數推算（中文字約 1 token／字，其餘約 4 字元／token），非各供應商實際 tokenizer 結果。
             </p>
           </>
         )}

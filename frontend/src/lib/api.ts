@@ -150,9 +150,22 @@ export async function createDemoSession(
   return postJson('/api/sessions/demo', form, llmHeaders());
 }
 
+// W3 page alignment (backend/services/comparison.py's align_pages(), same
+// alignment compare_documents() uses for the diff list) — one entry per
+// aligned page-pair in document order, each side null when that page has no
+// counterpart on the other side. CenterStage.tsx's page-by-page navigator
+// indexes into THIS list (not raw pdf_page number) so 「舊版」/「新版」 always
+// show the pages that were actually compared against each other, not two
+// unrelated pages that coincidentally share a page number.
+export interface PageAlignmentEntry {
+  old_pdf_page: number | null;
+  new_pdf_page: number | null;
+}
+
 export interface SessionPages {
   old: { pdf_page: number; print_label: string | null; label_source: string; text: string }[];
   new: { pdf_page: number; print_label: string | null; label_source: string; text: string }[];
+  page_alignment: PageAlignmentEntry[];
 }
 
 export async function getSessionPages(sessionId: string): Promise<SessionPages> {

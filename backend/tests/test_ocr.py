@@ -9,6 +9,7 @@ import pytest
 from backend.services.extraction import extract_document
 from backend.services.ocr.pipeline import LOW_CONFIDENCE_THRESHOLD, ocr_scanned_pages
 from backend.services.ocr.provider import OcrUnavailable, get_ocr_provider, resolve_ocr_provider
+from backend.services.llm.credentials import LlmCredentials
 from backend.services.ocr.schemas import OcrPageResult
 
 
@@ -44,7 +45,10 @@ def _make_text_pdf() -> bytes:
 
 
 def _clear_all_provider_env(monkeypatch):
-    for var in ("ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY"):
+    for var in (
+        "ANTHROPIC_API_KEY", "GEMINI_API_KEY", "OPENAI_API_KEY",
+        "AWS_BEARER_TOKEN_BEDROCK", "AWS_REGION", "AWS_DEFAULT_REGION", "PLIMSOLL_BEDROCK_MODEL", "PLIMSOLL_AI_PROVIDER",
+    ):
         monkeypatch.delenv(var, raising=False)
 
 
@@ -71,20 +75,20 @@ def test_get_ocr_provider_picks_openai_when_only_openai_key_set(monkeypatch):
 
 def test_resolve_ocr_provider_with_explicit_credentials(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    assert resolve_ocr_provider("anthropic", "sk-ant-not-real").provider_name == "anthropic-vision"
-    assert resolve_ocr_provider("gemini", "not-a-real-key").provider_name == "gemini-vision"
-    assert resolve_ocr_provider("openai", "not-a-real-key").provider_name == "openai-vision"
+    assert resolve_ocr_provider(LlmCredentials("anthropic", "sk-ant-not-real")).provider_name == "anthropic-vision"
+    assert resolve_ocr_provider(LlmCredentials("gemini", "not-a-real-key")).provider_name == "gemini-vision"
+    assert resolve_ocr_provider(LlmCredentials("openai", "not-a-real-key")).provider_name == "openai-vision"
 
 
 def test_resolve_ocr_provider_unknown_provider_degrades_to_none(monkeypatch):
     _clear_all_provider_env(monkeypatch)
-    assert resolve_ocr_provider("groq", "some-key") is None
+    assert resolve_ocr_provider(LlmCredentials("groq", "some-key")) is None
 
 
 def test_resolve_ocr_provider_falls_back_to_env(monkeypatch):
     _clear_all_provider_env(monkeypatch)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-not-real")
-    assert resolve_ocr_provider(None, None).provider_name == "anthropic-vision"
+    assert resolve_ocr_provider(LlmCredentials()).provider_name == "anthropic-vision"
 
 
 def test_ocr_scanned_pages_leaves_text_pages_untouched():

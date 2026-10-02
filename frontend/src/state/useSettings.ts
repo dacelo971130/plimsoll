@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { NO_LLM_LABEL } from '../lib/llmProviders';
+import { NO_LLM_LABEL, notifyLlmSettingsChanged } from '../lib/llmProviders';
 import type { ShellVariant } from './shellConfig';
 import type { AnalysisMode, HighlightPalette, ThemeMode } from '../types';
 
@@ -29,11 +29,14 @@ export interface Settings {
   // X-Llm-Api-Key headers sent on every AI-touching request.
   llmProvider: string;
   // P6 成本試算 — which model within `llmProvider` the cost blurb/estimator
-  // describes. Display/estimate only (see llmProviders.ts's module
-  // docstring) — the backend still always uses its own hardcoded model per
-  // provider; this never becomes a header. Empty string = no model chosen
-  // yet, AiModelTab seeds it to the provider's first model on mount/switch.
+  // describes. For Bedrock it is also the model the backend calls (sent as
+  // X-Llm-Model, see llmProviders.ts); for the other providers the backend's
+  // model is fixed and this is display/estimate only. Empty string = no model
+  // chosen yet, AiModelTab seeds it to the provider's first model.
   llmModel: string;
+  // Bedrock only — the AWS region requests go to (X-Llm-Region). Not a
+  // secret, so it lives here with the rest of the settings.
+  bedrockRegion: string;
   // P5 — session-level knob sent with the next upload/demo request
   // (backend/services/llm/residual.py's needs_semantic_review()).
   analysisMode: AnalysisMode;
@@ -47,6 +50,7 @@ const DEFAULT_SETTINGS: Settings = {
   shellVariant: 'A', // matches today's actual operating density — least surprise
   llmProvider: NO_LLM_LABEL,
   llmModel: '',
+  bedrockRegion: '',
   analysisMode: 'rules_first',
   fontSize: 'md',
 };
@@ -95,6 +99,12 @@ export function useSettings() {
     const FONT_SCALE: Record<Settings['fontSize'], string> = { sm: '0.9', md: '1', lg: '1.125', xl: '1.25' };
     root.style.setProperty('--font-scale', FONT_SCALE[settings.fontSize]);
   }, [settings]);
+
+  // After the effect above has written them to localStorage, which is where
+  // llmHeaders() reads them from.
+  useEffect(() => {
+    notifyLlmSettingsChanged();
+  }, [settings.llmProvider, settings.llmModel, settings.bedrockRegion]);
 
   function update<K extends keyof Settings>(key: K, value: Settings[K]) {
     setSettings((prev) => ({ ...prev, [key]: value }));

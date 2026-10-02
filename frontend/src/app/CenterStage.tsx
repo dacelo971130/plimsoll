@@ -56,7 +56,11 @@ interface DocumentColumnProps {
   pageData: PageEntry | null;
   mode: SourceMode;
   differences: DifferenceRecord[];
-  page: number;
+  // THIS SIDE's own raw pdf_page for the current alignment entry — never the
+  // shared navigation index. null means this alignment entry has no
+  // counterpart on this side at all (a whole-page insert/delete), not that
+  // data hasn't loaded yet.
+  page: number | null;
   query: string;
   sessionId: string;
   activeDifferenceId: string | null;
@@ -107,11 +111,18 @@ function DocumentColumn({
   return (
     <div className="min-w-0 flex-1">
       <div className="flex items-center justify-between gap-2">
-        <div className="text-[11px] font-medium uppercase text-ink-500">{label}</div>
+        <div className="text-[11px] font-medium uppercase text-ink-500">
+          {label}
+          {/* Old/new no longer share one page number (W3 alignment can shift
+              them independently) — show which real page this column is on,
+              since "11 / 431" up top is now a position in the aligned pair
+              list, not a page number either side's PDF actually uses. */}
+          {page !== null && <span className="ml-1 normal-case tabular-nums text-ink-400">· 第 {page} 頁</span>}
+        </div>
         {/* 殼 B 專屬新增（plimsoll-two-shell-spec.md §3 #07）— 原生瀏覽器 PDF
             檢視器的縮放/列印/文字搜尋是內嵌 canvas 沒有的真實能力差異，不是裝
             飾；真正的 <a> 元素，不是 window.open()（§2 問題 6）。 */}
-        {mode === 'original' && showPdfNewTabLink && (
+        {mode === 'original' && showPdfNewTabLink && page !== null && (
           <a
             href={sessionPdfUrl(sessionId, docSide)}
             target="_blank"
@@ -122,7 +133,15 @@ function DocumentColumn({
           </a>
         )}
       </div>
-      {mode === 'reconstructed' ? (
+      {page === null ? (
+        // W3 alignment found no counterpart on this side for the page shown
+        // opposite — a whole-page insert/delete, not missing data. Showing
+        // THIS side's unrelated raw page here (the old positional-zip
+        // behavior) was the actual bug: it looked like real content got
+        // flagged as changed, when the two columns were just two unrelated
+        // pages that happened to share a page number.
+        <p className="mt-1 text-[13px] text-ink-400">此版本無對應頁面（該內容為整頁新增／刪除，見右側差異清單）。</p>
+      ) : mode === 'reconstructed' ? (
         <div
           className="mt-1 whitespace-pre-wrap text-[14.5px] leading-[1.85] text-ink-800"
           style={{ fontFamily: 'var(--font-source)' }}
@@ -224,13 +243,20 @@ function ComparisonViewer({ shell, sessionId, pageCountOld, pageCountNew, differ
     setHoverPoint(null);
   }, [page, mode]);
 
-  // Jumping from a DiffCard's page-ref pill only needs to move the page
-  // number — the viewer always shows both columns at once now (一律並排),
-  // so there's no separate "side" to switch into.
+  // Jumping from a DiffCard's page-ref pill — `page` is now a position in
+  // page_alignment, not a raw pdf_page, so find the alignment entry whose
+  // requested SIDE has that pdf_page (the other side comes along for free,
+  // whatever it actually aligns to — no separate "side" to switch into, the
+  // viewer always shows both columns at once). Depends on `pages` too: a
+  // focusRequest firing before page_alignment has loaded should still land
+  // once it arrives, rather than silently no-op against an empty list.
   useEffect(() => {
-    if (!focusRequest) return;
-    setPage(focusRequest.pdfPage);
-  }, [focusRequest]);
+    if (!focusRequest || !pages) return;
+    const idx = pages.page_alignment.findIndex((e) =>
+      focusRequest.side === 'old' ? e.old_pdf_page === focusRequest.pdfPage : e.new_pdf_page === focusRequest.pdfPage,
+    );
+    if (idx !== -1) setPage(idx + 1);
+  }, [focusRequest, pages]);
 
   // Scroll the flashed difference into view once its page has rendered.
   useEffect(() => {
@@ -243,9 +269,16 @@ function ComparisonViewer({ shell, sessionId, pageCountOld, pageCountNew, differ
     return () => clearTimeout(timer);
   }, [activeDifferenceId, page, mode]);
 
-  const pageCount = Math.max(pageCountOld, pageCountNew);
-  const oldPage = pages?.old.find((p) => p.pdf_page === page) ?? null;
-  const newPage = pages?.new.find((p) => p.pdf_page === page) ?? null;
+  // `page` is a 1-indexed position in page_alignment (W3, the SAME alignment
+  // the diff list uses) — not a raw pdf_page number. Falls back to the naive
+  // max-of-both-counts only while page_alignment hasn't loaded yet, so the
+  // pager doesn't flash "0" during that instant.
+  const pageCount = pages?.page_alignment.length ?? Math.max(pageCountOld, pageCountNew);
+  const alignmentEntry = pages?.page_alignment[page - 1] ?? null;
+  const oldPdfPage = alignmentEntry?.old_pdf_page ?? null;
+  const newPdfPage = alignmentEntry?.new_pdf_page ?? null;
+  const oldPage = oldPdfPage != null ? pages?.old.find((p) => p.pdf_page === oldPdfPage) ?? null : null;
+  const newPage = newPdfPage != null ? pages?.new.find((p) => p.pdf_page === newPdfPage) ?? null : null;
 
   const hits = useMemo(() => {
     const oldHits = oldPage ? countHits(oldPage.text, query) : 0;
@@ -307,7 +340,7 @@ function ComparisonViewer({ shell, sessionId, pageCountOld, pageCountNew, differ
           <button type="button" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1} className="disabled:opacity-30">
             <ChevronLeft size={16} />
           </button>
-          <span className="tabular-nums">
+          <span className="tabular-nums" title="比對後的頁面順序，非原始頁碼 — 每欄自己的頁碼見欄位標題">
             {page} / {pageCount} {query.trim() && `· 命中 ${hits} 處`}
           </span>
           <button
@@ -336,7 +369,7 @@ function ComparisonViewer({ shell, sessionId, pageCountOld, pageCountNew, differ
               pageData={oldPage}
               mode={mode}
               differences={differences}
-              page={page}
+              page={oldPdfPage}
               query={query}
               sessionId={sessionId}
               activeDifferenceId={activeDifferenceId}
@@ -353,7 +386,7 @@ function ComparisonViewer({ shell, sessionId, pageCountOld, pageCountNew, differ
               pageData={newPage}
               mode={mode}
               differences={differences}
-              page={page}
+              page={newPdfPage}
               query={query}
               sessionId={sessionId}
               activeDifferenceId={activeDifferenceId}

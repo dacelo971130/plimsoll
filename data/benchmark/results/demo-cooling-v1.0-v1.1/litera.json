@@ -1,0 +1,14 @@
+{
+  "tool": "litera",
+  "display_name": "Litera Compare",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "Litera Compare for PDF → 選原檔與修改檔 → Compare → 讀 Change List",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "桌面版本機執行；另有網頁與 M365 整合",
+  "risk_mapping": "核心比對不分級；另購的 Lito AI 宣稱有風險分析",
+  "notes": ""
+}

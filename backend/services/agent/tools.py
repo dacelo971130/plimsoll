@@ -16,8 +16,9 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from backend.config import SESSIONS_ROOT
-from backend.services import session_store
+from backend.services import session_store, text_similarity
 from backend.services.agent.labels import CONDITION_LABEL, RULE_LABEL, rule_label
+from backend.services.agent.records import latest_briefing
 from backend.storage.config_loader import get_glossary, get_ruleset, latest_glossary_version
 
 EXCERPT_CHARS = 80
@@ -25,6 +26,11 @@ SEARCH_HIT_LIMIT = 10
 SNIPPET_RADIUS = 40
 HISTORY_HIT_LIMIT = 8
 UNSTATED_REASON = "文件未載明"
+# Below this, text_similarity.rank()/rank_against() drop a candidate as noise
+# rather than a real (if weak) match — conservative on purpose: cutting only
+# clearly-unrelated pages, not replacing the model's own judgment about a
+# low-but-nonzero score.
+SEARCH_SCORE_FLOOR = 0.05
 
 
 def find_chain_for_session(session_id: str) -> dict | None:
@@ -61,6 +67,23 @@ class SessionContext:
     session: dict
     pages: dict[str, list[dict]]
     chain: dict | None = None
+    # Lazily built, reused across every search_text call in this run (a run
+    # can call tools up to RunLimits.max_tool_calls times — runner.py) rather
+    # than re-fitting a TF-IDF corpus over the whole document per query. Keyed
+    # by side so "old"/"new"/both reuse the same fitted corpus regardless of
+    # which combination a given call asks for. pages.json is write-once
+    # (session_store.py) so nothing here can go stale within a run's lifetime.
+    _search_index: dict[str, tuple[text_similarity.Corpus, list[text_similarity.Vector]]] = field(
+        default_factory=dict, repr=False, compare=False
+    )
+
+    def _page_search_index(self, side: str) -> tuple[text_similarity.Corpus, list[text_similarity.Vector]]:
+        if side not in self._search_index:
+            texts = [p.get("text") or "" for p in self.pages.get(side, [])]
+            corpus = text_similarity.fit_corpus(texts)
+            vectors = [text_similarity.vectorize(t, corpus) for t in texts]
+            self._search_index[side] = (corpus, vectors)
+        return self._search_index[side]
 
     @classmethod
     def load(cls, session_id: str) -> "SessionContext | None":
@@ -238,19 +261,48 @@ def read_page(ctx: SessionContext, side: str, pdf_page: int) -> str:
     )
 
 
+def _snippet(text: str, needle_lower: str) -> str:
+    """Precise, position-anchored snippet when the query is a literal
+    substring (unchanged from the old behavior); otherwise a representative
+    excerpt from the top of the page — there's no single "position" to
+    anchor a snippet to for a similarity match, only a whole-page score."""
+    at = text.lower().find(needle_lower)
+    if at >= 0:
+        start, end = max(0, at - SNIPPET_RADIUS), min(len(text), at + len(needle_lower) + SNIPPET_RADIUS)
+        return text[start:end]
+    return text[: 2 * SNIPPET_RADIUS]
+
+
 def search_text(ctx: SessionContext, query: str, side: str = "both") -> str:
+    """Ranked by similarity (text_similarity.rank_against), not substring
+    position — a query phrased differently from the document's own wording
+    can still find the right page, as long as it shares enough of the page's
+    distinctive (rare, hence highly-weighted) vocabulary. A literal match
+    still gets a precise, position-anchored snippet (see _snippet); a
+    similarity-only match gets a representative excerpt plus `score` so the
+    model can judge how confident the hit is."""
     needle = query.strip().lower()
     if not needle:
         raise ToolInputError("query 不可為空。")
     sides = ("old", "new") if side == "both" else (side,)
     hits = []
     for s in sides:
-        for page in ctx.pages.get(s, []):
+        pages = ctx.pages.get(s, [])
+        corpus, vectors = ctx._page_search_index(s)
+        ranked = text_similarity.rank_against(query, corpus, vectors, floor=SEARCH_SCORE_FLOOR)
+        for idx, score in ranked:
+            page = pages[idx]
             text = page.get("text") or ""
-            at = text.lower().find(needle)
-            if at >= 0:
-                start, end = max(0, at - SNIPPET_RADIUS), min(len(text), at + len(needle) + SNIPPET_RADIUS)
-                hits.append({"side": s, "pdf_page": page.get("pdf_page"), "print_label": page.get("print_label"), "snippet": text[start:end]})
+            hits.append(
+                {
+                    "side": s,
+                    "pdf_page": page.get("pdf_page"),
+                    "print_label": page.get("print_label"),
+                    "snippet": _snippet(text, needle),
+                    "score": round(score, 2),
+                }
+            )
+    hits.sort(key=lambda h: h["score"], reverse=True)
     return _dump({"query": query, "hits": hits[:SEARCH_HIT_LIMIT], "truncated": len(hits) > SEARCH_HIT_LIMIT})
 
 
@@ -305,39 +357,135 @@ def read_version_page(ctx: SessionContext, version: str, pdf_page: int) -> str:
 
 def search_history(ctx: SessionContext, query: str) -> str:
     """歷史案例: similar changes in *earlier* local comparisons (never this
-    one). Local only — §30's corpus rule: no external class-society rules."""
-    needle = query.strip().lower()
-    if not needle:
+    one). Local only — §30's corpus rule: no external class-society rules.
+
+    Ranked by similarity (text_similarity.rank), not substring containment —
+    same reasoning as search_text. Re-fits its corpus fresh on every call
+    (unlike search_text, which caches per session): it scans a different set
+    of past sessions' differences each time, so there's no stable per-run
+    corpus worth caching here."""
+    if not query.strip():
         raise ToolInputError("query 不可為空。")
     chain_members = set()
     if ctx.chain:
         chain_members = {*ctx.chain["adjacent_session_ids"], *ctx.chain["anchor_session_ids"]}
-    hits = []
+    candidates: list[str] = []
+    records: list[tuple[dict, dict]] = []  # (past session, difference) per candidate, same index
     for past in session_store.list_sessions():
         if past["session_id"] == ctx.session_id:
             continue
-        state = past.get("review_state", {})
         for d in past.get("differences", []):
             haystack = " ".join(filter(None, [(d.get("old") or {}).get("text"), (d.get("new") or {}).get("text"), d.get("affected")]))
-            if needle not in haystack.lower():
-                continue
-            hits.append(
+            candidates.append(haystack)
+            records.append((past, d))
+
+    ranked = text_similarity.rank(query, candidates, floor=SEARCH_SCORE_FLOOR)
+    hits = []
+    for idx, score in ranked[:HISTORY_HIT_LIMIT]:
+        past, d = records[idx]
+        state = past.get("review_state", {})
+        hits.append(
+            {
+                "session_id": past["session_id"],
+                "title": past.get("title"),
+                "versions": f"{past['old_meta'].get('version') or '?'} → {past['new_meta'].get('version') or '?'}",
+                "created_at": past.get("created_at"),
+                "same_chain": past["session_id"] in chain_members,
+                "difference_id": d["id"],
+                "risk": d["ai_risk"],
+                "change_type": d["change_type"],
+                "rule": rule_label(d.get("rule_id")),
+                "old": _span(d.get("old"), full=True),
+                "new": _span(d.get("new"), full=True),
+                "verdict": (state.get(d["id"]) or {}).get("human_verdict"),
+                "score": round(score, 2),
+            }
+        )
+    return _dump({"query": query, "hits": hits, "truncated": len(ranked) > HISTORY_HIT_LIMIT})
+
+
+CONTEXT_CHAR_BUDGET = 30_000
+_RISK_ORDER = {"High": 0, "Medium": 1, "Low": 2}
+
+
+def question_context(ctx: SessionContext) -> str:
+    """Handed to every question up front (runs.py), so an overview-type
+    question — 「如果我只有五分鐘…」 — can be answered from what's already in
+    the prompt instead of a long tool hunt: the session overview plus every
+    difference with its full old/new text, High first, until the character
+    budget runs out. Ids that didn't fit are listed so the model knows to
+    fetch them with get_difference. Same data the tools return, so quotes
+    taken from it pass verification."""
+    rows: list[dict] = []
+    left_out: list[str] = []
+    used = 0
+    for d in sorted(ctx.differences, key=lambda d: _RISK_ORDER.get(d["ai_risk"], 3)):
+        row = {
+            "id": d["id"],
+            "risk": d["ai_risk"],
+            "change_type": d["change_type"],
+            "rule": rule_label(d.get("rule_id")),
+            "section": d.get("affected"),
+            "old": _span(d.get("old"), full=True),
+            "new": _span(d.get("new"), full=True),
+            "verdict": _verdict(ctx, d["id"]),
+        }
+        size = len(_dump(row))
+        if used + size > CONTEXT_CHAR_BUDGET:
+            left_out.append(d["id"])
+            continue
+        rows.append(row)
+        used += size
+    return _dump({"overview": json.loads(get_session_overview(ctx)), "differences": rows, "not_included": left_out})
+
+
+def _as_citation(c: dict) -> dict:
+    """A verified briefing citation, in the shape an answer's citations take
+    ("" = this comparison / no difference) — the quote is already checked."""
+    return {
+        "session_id": c.get("session_id") or "",
+        "difference_id": c.get("difference_id") or "",
+        "side": c["side"],
+        "pdf_page": c["pdf_page"],
+        "quote": c["quote"],
+    }
+
+
+def get_briefing(ctx: SessionContext) -> str:
+    """Q&A only: the latest finished 覆核簡報 of this comparison, so a
+    question about its advice (which differences to 停用舊版, what to look at
+    first) can be answered. Everything in it is the agent's earlier ADVICE,
+    already verified (verify.py) — not something the documents say; the
+    answer prompt makes the model say so, and runs.py flags the answer."""
+    record = latest_briefing(ctx.session_id)
+    if record is None or not record.get("result"):
+        return _dump({"briefing": None, "note": "這次比對還沒有覆核簡報。"})
+    r = record["result"]
+    return _dump(
+        {
+            "note": "以下是覆核簡報裡 AI 的建議，不是文件規定。citations 都已逐字核對過原文，可以照抄沿用。",
+            "summary": r.get("summary"),
+            "priority": [{"difference_id": p["difference_id"], "reason": p["reason"], "citations": [_as_citation(c) for c in p["citations"]]} for p in r.get("priority", [])],
+            "items": [
                 {
-                    "session_id": past["session_id"],
-                    "title": past.get("title"),
-                    "versions": f"{past['old_meta'].get('version') or '?'} → {past['new_meta'].get('version') or '?'}",
-                    "created_at": past.get("created_at"),
-                    "same_chain": past["session_id"] in chain_members,
-                    "difference_id": d["id"],
-                    "risk": d["ai_risk"],
-                    "change_type": d["change_type"],
-                    "rule": rule_label(d.get("rule_id")),
-                    "old": _span(d.get("old"), full=True),
-                    "new": _span(d.get("new"), full=True),
-                    "verdict": (state.get(d["id"]) or {}).get("human_verdict"),
+                    "difference_ids": it["difference_ids"],
+                    "action": it["action"],
+                    "action_detail": it["action_detail"],
+                    "impact": it["impact"],
+                    "citations": [_as_citation(c) for c in it["citations"]],
                 }
-            )
-    return _dump({"query": query, "hits": hits[:HISTORY_HIT_LIMIT], "truncated": len(hits) > HISTORY_HIT_LIMIT})
+                for it in r.get("items", [])
+            ],
+            "suggestions": [
+                {"difference_id": s["difference_id"], "verdict": s["verdict"], "reason": s["reason"], "citations": [_as_citation(c) for c in s["citations"]]}
+                for s in r.get("suggestions", [])
+            ],
+            "cause_trace": [
+                {"parameter": t["parameter"], "changed_in_version": t["changed_in_version"], "reason": t["reason"], "citations": [_as_citation(c) for c in t["citations"]]}
+                for t in r.get("cause_trace", [])
+            ],
+        }
+    )
 
 
 def _describe_condition(when: dict) -> list[str]:
@@ -384,7 +532,10 @@ def lookup_glossary(ctx: SessionContext, term: str) -> str:
         if term == entry.term or term in entry.aliases:
             if entry.status != "approved":
                 return _dump({"term": term, "found": False, "reason": "這個名詞的定義還沒定案，列入待確認。"})
-            return _dump({"term": entry.term, "found": True, "definition": entry.definition})
+            found = {"term": entry.term, "found": True, "definition": entry.definition}
+            if table.simulated:
+                found["note"] = "模擬版詞彙表的定義，尚未經專業人員審核。"
+            return _dump(found)
     return _dump({"term": term, "found": False, "reason": "詞彙表沒有這個名詞，列入待確認。"})
 
 
@@ -493,7 +644,18 @@ TOOLS: list[ToolSpec] = [
     ),
 ]
 
-TOOLS_BY_NAME = {t.name: t for t in TOOLS}
+# Q&A gets one more tool than the briefing: reading the latest briefing's
+# advice. The briefing itself never sees an older briefing.
+GET_BRIEFING = ToolSpec(
+    name="get_briefing",
+    description="讀取這次比對最新的覆核簡報（AI 的建議：優先順序、影響範圍、建議動作、建議判定、變更原因追溯）。只在問題問到簡報的建議時使用；回答必須寫明這是 AI 建議、不是文件規定。",
+    input_schema=_object({}, []),
+    run=get_briefing,
+    step_label=lambda _a: "讀取覆核簡報",
+)
+QUESTION_TOOLS: list[ToolSpec] = [*TOOLS, GET_BRIEFING]
+
+TOOLS_BY_NAME = {t.name: t for t in QUESTION_TOOLS}
 
 
 def run_tool(ctx: SessionContext, name: str, arguments: dict) -> str:

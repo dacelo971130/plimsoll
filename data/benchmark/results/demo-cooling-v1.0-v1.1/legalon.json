@@ -1,0 +1,14 @@
+{
+  "tool": "legalon",
+  "display_name": "LegalOn — Compare",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "上傳兩版 → Compare by Article → 下載 Excel 轉成 CSV",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "LegalOn 雲端",
+  "risk_mapping": "合約審閱有風險標示，比較結果未說明",
+  "notes": ""
+}

@@ -37,6 +37,11 @@ COPY backend/ ./backend/
 # are NOT — those are per-run local state, see docker-compose.yml's volume.
 COPY data/demo/ ./data/demo/
 COPY data/store/config/ ./data/store/config/
+# The glossary is product content, not runtime state — a second copy lives
+# outside the data volume, because a named volume only takes the seed config
+# on its first run and would otherwise never see a newer glossary
+# (backend/storage/config_loader.py reads both).
+COPY data/store/config/glossary/ ./seed/glossary/
 COPY --from=frontend-build /app/frontend/dist ./frontend/dist
 
 # 8110 (not 8099, which Postman Interceptor claims) — see docker-compose.yml.

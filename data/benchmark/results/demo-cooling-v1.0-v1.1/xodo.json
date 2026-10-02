@@ -1,0 +1,14 @@
+{
+  "tool": "xodo",
+  "display_name": "Xodo PDF Compare",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "xodo.com/pdf-compare → 上傳兩份 PDF → Semantic Text → Compare → 下載合併結果",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "上傳到 Xodo 伺服器（AES-256 儲存），刪除時限未說明",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

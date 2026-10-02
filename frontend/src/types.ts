@@ -182,6 +182,8 @@ export interface AgentPending {
 export interface AgentGlossaryEntry {
   term: string;
   definition: string;
+  // From a simulated (not yet expert-reviewed) glossary — shown as 模擬版.
+  simulated?: boolean;
 }
 
 export interface AgentBriefing {
@@ -198,8 +200,15 @@ export interface AgentBriefing {
 }
 
 export interface AgentAnswer {
-  answer_type: 'answer' | 'not_in_documents' | 'out_of_scope';
+  // unverified = the model answered, but a quote or number didn't match the
+  // documents (even after one correction), so the server withheld it.
+  answer_type: 'answer' | 'not_in_documents' | 'out_of_scope' | 'unverified';
   text: string;
+  // True when the answer drew on the latest 覆核簡報 (AI advice, not the documents).
+  uses_briefing?: boolean;
+  // Sentences taken out because a number in them wasn't in the cited text
+  // (each one is listed under pending).
+  withheld?: number;
   citations: AgentCitation[];
   pending: AgentPending[];
   glossary: AgentGlossaryEntry[];
@@ -222,6 +231,10 @@ export interface AgentRun<R = AgentBriefing | AgentAnswer> {
   error: string | null;
   started_at: string;
   finished_at: string | null;
+  // Which AI answered and what it cost — shown under each answer.
+  provider?: string | null;
+  model?: string | null;
+  usage?: Partial<Record<'input_tokens' | 'output_tokens' | 'cache_read_input_tokens' | 'cache_creation_input_tokens', number>>;
 }
 
 export interface AgentStatus {
@@ -251,6 +264,7 @@ export interface Glossary {
   version: string | null;
   status: 'draft' | 'approved' | null;
   reviewed_at: string | null;
+  simulated?: boolean;
   terms: GlossaryTerm[];
 }
 

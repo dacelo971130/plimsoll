@@ -104,12 +104,13 @@ def glossary() -> dict:
     off as settled; a missing file returns an empty list, never a 500."""
     version = latest_glossary_version()
     if version is None:
-        return {"data_origin": "computed", "version": None, "status": None, "reviewed_at": None, "terms": []}
+        return {"data_origin": "computed", "version": None, "status": None, "reviewed_at": None, "simulated": False, "terms": []}
     table = get_glossary(version)
     return {
         "data_origin": "computed",
         "version": table.version,
         "status": table.status,
         "reviewed_at": table.reviewed_at,
+        "simulated": table.simulated,
         "terms": [t.model_dump(exclude={"sources"}) for t in table.terms],
     }

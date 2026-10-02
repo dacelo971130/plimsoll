@@ -63,8 +63,9 @@ class GlossaryTerm(BaseModel):
     aliases: list[str] = []
     category: str
     definition: str
-    # Repo paths the definition was lifted from — review evidence only;
-    # never sent to the UI (subtraction matrix: 實作名詞不給使用者看).
+    # Where the definition came from — repo paths, or for domain terms the
+    # law article / standard-term entry URL. Review evidence only; never
+    # sent to the UI (subtraction matrix: 實作名詞不給使用者看).
     sources: list[str]
     status: Literal["draft", "pending", "approved"]
 
@@ -83,6 +84,11 @@ class Glossary(BaseModel):
     reviewed_by: str | None = None
     reviewed_at: str | None = None
     note: str | None = None
+    # A stand-in table the user chose to switch on before an expert review
+    # (2026-10-02): approved so the agent can cite it, but every place that
+    # shows a definition says it's simulated, and the formal sign-off
+    # report leaves it out (backend/services/export.py).
+    simulated: bool = False
     terms: list[GlossaryTerm]
 
 

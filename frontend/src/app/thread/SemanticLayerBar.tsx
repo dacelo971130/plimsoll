@@ -9,9 +9,9 @@ interface SemanticLayerBarProps {
   onSuggestions: (bySessionDifferenceId: Record<string, AiSemanticSuggestion | null>) => void;
   // 覆核 Agent (useAgent.ts) — folded into this same button's click instead
   // of keeping its own separate 請 Agent 準備覆核 trigger in AgentSection.
-  // Only Claude backs the Agent (unlike 語意建議／別名候選, which work with
-  // any of the three real providers), so this can be false while the other
-  // two actions still run.
+  // The Agent runs on Claude, Gemini or Bedrock but not ChatGPT (unlike
+  // 語意建議／別名候選, which work with every provider), so this can be false
+  // while the other two actions still run.
   agentAvailable: boolean;
   onStartAgentBriefing: () => void;
 }

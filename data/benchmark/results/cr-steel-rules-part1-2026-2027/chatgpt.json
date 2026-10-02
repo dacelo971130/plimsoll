@@ -1,0 +1,14 @@
+{
+  "tool": "chatgpt",
+  "display_name": "ChatGPT",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "同一個對話上傳兩份 PDF，貼 templates/llm_prompt.md；記錄模型名稱",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "上傳到 OpenAI 雲端",
+  "risk_mapping": "提示詞要求才會分（模型判斷）",
+  "notes": ""
+}

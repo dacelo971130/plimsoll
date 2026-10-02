@@ -1,0 +1,14 @@
+{
+  "tool": "copilot",
+  "display_name": "Microsoft Copilot（個人版）",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "Copilot → ＋ → 加入兩份 PDF → 貼 templates/llm_prompt.md",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "Microsoft 雲端，上傳檔最多保留 18 個月",
+  "risk_mapping": "提示詞要求才會分",
+  "notes": ""
+}

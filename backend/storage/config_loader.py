@@ -15,7 +15,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from backend.config import CONFIG_ROOT
+from backend.config import CONFIG_ROOT, GLOSSARY_SEED_ROOT
 from backend.models.config_models import (
     ApprovalPolicy,
     ApprovalRole,
@@ -100,19 +100,29 @@ def latest_term_aliases_version(config_root: Path = CONFIG_ROOT) -> str:
     return versions[-1]
 
 
+def _glossary_dirs(config_root: Path) -> list[Path]:
+    """Where glossary versions live: the config root, plus — for the real
+    config root — the Docker image's own copy outside the data volume. A
+    named volume copies seed config only on its first run, so a volume made
+    before the glossary (or before a newer version) existed would otherwise
+    never see it. The config root comes first, so a version edited there
+    (e.g. approved by hand) wins over the image's copy of the same version."""
+    return [config_root / "glossary", GLOSSARY_SEED_ROOT] if config_root == CONFIG_ROOT else [config_root / "glossary"]
+
+
 @lru_cache(maxsize=None)
 def get_glossary(version: str, config_root: Path = CONFIG_ROOT) -> Glossary:
-    raw = _read_json(config_root / "glossary" / f"{version}.json")
-    return Glossary(**raw)
+    path = next((d / f"{version}.json" for d in _glossary_dirs(config_root) if (d / f"{version}.json").exists()), None)
+    if path is None:
+        raise FileNotFoundError(f"glossary {version} not found")
+    return Glossary(**_read_json(path))
 
 
 def latest_glossary_version(config_root: Path = CONFIG_ROOT) -> str | None:
-    """Highest `v{N}.json` under glossary/, or None when there isn't one —
-    a Docker volume seeded before the glossary existed won't have it
-    (named volumes copy seed config only on first run), and the help page
-    must still open without it."""
+    """Highest `v{N}.json` across _glossary_dirs(), or None when there isn't
+    one — the help page must still open without it."""
     versions = sorted(
-        (p.stem for p in (config_root / "glossary").glob("v*.json")),
+        {p.stem for d in _glossary_dirs(config_root) for p in d.glob("v*.json")},
         key=lambda v: int(v.lstrip("v")),
     )
     return versions[-1] if versions else None

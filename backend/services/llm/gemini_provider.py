@@ -17,6 +17,10 @@ Tech choices, mirroring anthropic_provider.py's tech-choices docstring:
     on `response.text`), not via `.parsed` — unconfirmed whether the SDK
     populates `.parsed` on batch-deserialized responses the same way it does
     for a live `generate_content()` call, so this never depends on it.
+  - `gemini-3.8-flash` (GA): Google stopped offering the 2.5 models to new
+    projects in 2026. Its thinking is set with `thinking_level`, taken from
+    each call's `effort` (low/medium/high) — `thinking_budget` is the legacy
+    knob Google advises against on Gemini 3.
 """
 
 from __future__ import annotations
@@ -43,7 +47,7 @@ from backend.services.llm.schemas import (
     TrailAnalysis,
 )
 
-MODEL_ID = "gemini-2.5-flash"
+MODEL_ID = "gemini-3.8-flash"
 
 
 class GeminiProvider:
@@ -62,7 +66,7 @@ class GeminiProvider:
                     system_instruction=system_prompt,
                     response_mime_type="application/json",
                     response_schema=schema,
-                    thinking_config=genai_types.ThinkingConfig(thinking_budget=-1),  # -1 = dynamic/adaptive
+                    thinking_config=genai_types.ThinkingConfig(thinking_level=effort),
                 ),
             )
         except genai_errors.APIError as err:

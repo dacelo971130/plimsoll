@@ -1,0 +1,14 @@
+{
+  "tool": "draftable",
+  "display_name": "Draftable（Online／Desktop）",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "draftable.com/compare → 左放舊版、右放新版 → Compare → 讀變更清單",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "官方稱 Online 版在本機瀏覽器處理（使用前請再確認）；Desktop 本機",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

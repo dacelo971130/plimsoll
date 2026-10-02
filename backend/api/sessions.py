@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 from pydantic import BaseModel
 
 from backend.api.llm_headers import llm_credentials
+from backend.services.llm.credentials import LlmCredentials
 from backend.config import REPO_ROOT
 from backend.services import session_store
 
@@ -117,11 +118,10 @@ async def upload_or_create_session(
     old_date: str | None = Form(None),
     new_date: str | None = Form(None),
     analysis_mode: Literal["rules_first", "model_heavy", "model_only"] = Form("rules_first"),
-    creds: tuple[str | None, str | None] = Depends(llm_credentials),
+    llm: LlmCredentials = Depends(llm_credentials),
 ):
     old_bytes = await old_file.read()
     new_bytes = await new_file.read()
-    provider_id, api_key = creds
     return session_store.process_upload(
         old_bytes,
         old_file.filename or "old.pdf",
@@ -132,8 +132,7 @@ async def upload_or_create_session(
         old_date_override=old_date,
         new_date_override=new_date,
         analysis_mode=analysis_mode,
-        llm_provider_id=provider_id,
-        llm_api_key=api_key,
+        llm=llm,
     )
 
 
@@ -155,14 +154,13 @@ def list_demo_fixtures():
 def create_demo_session(
     demo_id: str = Form("main_engine_cooling"),
     analysis_mode: Literal["rules_first", "model_heavy", "model_only"] = Form("rules_first"),
-    creds: tuple[str | None, str | None] = Depends(llm_credentials),
+    llm: LlmCredentials = Depends(llm_credentials),
 ):
     fixture = _FIXTURES_BY_ID.get(demo_id)
     if fixture is None:
         raise HTTPException(status_code=404, detail=f"Unknown demo fixture: {demo_id!r}")
     if not (fixture.old_path.exists() and fixture.new_path.exists()):
         raise HTTPException(status_code=404, detail=f"Demo fixture files missing on disk: {fixture.id}")
-    provider_id, api_key = creds
     return session_store.process_upload(
         fixture.old_path.read_bytes(),
         fixture.old_path.name,
@@ -173,8 +171,7 @@ def create_demo_session(
         old_date_override=fixture.old_date,
         new_date_override=fixture.new_date,
         analysis_mode=analysis_mode,
-        llm_provider_id=provider_id,
-        llm_api_key=api_key,
+        llm=llm,
     )
 
 
@@ -208,27 +205,25 @@ def delete_session(session_id: str):
 
 
 @router.post("/{session_id}/semantic-preview")
-def semantic_preview(session_id: str, creds: tuple[str | None, str | None] = Depends(llm_credentials)):
+def semantic_preview(session_id: str, llm: LlmCredentials = Depends(llm_credentials)):
     """W7a, explicitly opt-in — never triggered by session creation itself.
     Returns the session's differences with `ai_semantic_suggestion` filled
     in wherever the deterministic trigger (default rule + large edit)
     selected them and a provider is configured; `semantic_layer_available`
     tells the frontend whether to show the feature at all."""
-    provider_id, api_key = creds
-    result = session_store.preview_semantic_suggestions(session_id, llm_provider_id=provider_id, llm_api_key=api_key)
+    result = session_store.preview_semantic_suggestions(session_id, llm=llm)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     return {"data_origin": "computed", **result}
 
 
 @router.post("/{session_id}/suggest-aliases")
-def suggest_aliases(session_id: str, creds: tuple[str | None, str | None] = Depends(llm_credentials)):
+def suggest_aliases(session_id: str, llm: LlmCredentials = Depends(llm_credentials)):
     """P5 term_aliases 核准流程 step 1 — proposes candidates from this
     session's clarification-type residuals and queues them for approval via
     /api/term-aliases/pending. Opt-in like semantic-preview; never called
     automatically."""
-    provider_id, api_key = creds
-    result = session_store.suggest_aliases_for_session(session_id, llm_provider_id=provider_id, llm_api_key=api_key)
+    result = session_store.suggest_aliases_for_session(session_id, llm=llm)
     if result is None:
         raise HTTPException(status_code=404, detail=f"Session {session_id} not found")
     return {"data_origin": "computed", **result}

@@ -121,7 +121,7 @@ export const HELP_SECTIONS: HelpSection[] = [
             風險篩選：<Ui>全部</Ui>／<Ui>High</Ui>／<Ui>Medium</Ui>／<Ui>Low</Ui>。
           </li>
           <li>
-            <Ui>覆核 Agent</Ui>（能用 Claude 才出現），見「覆核 Agent」一節。
+            <Ui>覆核 Agent</Ui>（選 Claude、Gemini 或 Bedrock 才出現），見「覆核 Agent」一節。
           </li>
           <li>
             <Ui>鏈式趨勢分析</Ui>（有多版本比對時），見「多版本鏈式分析」一節。
@@ -322,7 +322,6 @@ export const HELP_SECTIONS: HelpSection[] = [
             ['ChatGPT（OpenAI）', 'GPT-6 Astra', '$10.00 / $50.00', '旗艦'],
             ['Bedrock（AWS）', 'Amazon Nova 2 Lite', '$0.30 / $2.50', '輕量'],
             ['Bedrock（AWS）', 'Claude Haiku 4.5（Bedrock）', '$1.00 / $5.00', '輕量'],
-            ['Bedrock（AWS）', 'Amazon Nova 2 Pro（Preview）', '$1.25 / $10.00', '中階'],
             ['Bedrock（AWS）', 'Claude Sonnet 5（Bedrock）', '$2.00 / $10.00', '中階'],
           ]}
         />
@@ -330,7 +329,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           用這份文件實際會送審的差異筆數與文字量估算費用區間（低：預設 rules_first 模式；高：最寬鬆 model_only 模式），仍是用字元數推算
           token，不是各供應商真正的 tokenizer 結果，正式費用以供應商帳單為準。
         </p>
-        <Note>Bedrock 只在選單與試算裡供比較——後端尚未串接，選了等同未貼金鑰，比對本身不受影響。</Note>
+        <Note>Bedrock 要另外選 <Ui>區域（Region）</Ui>，並在 AWS 主控台先開通所選模型；Bedrock 不支援批次語意分析。Nova 2 Lite 的牌價以從美東呼叫的全球端點為準，從東京呼叫約貴兩成。</Note>
       </>
     ),
   },
@@ -342,7 +341,7 @@ export const HELP_SECTIONS: HelpSection[] = [
         <p>Agent 在你開始覆核前先查證、整理、排序。它只提供建議，判定永遠由你決定。</p>
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            位置：右欄 <Ui>覆核 Agent</Ui>，只在可用 Claude 時出現。
+            位置：右欄 <Ui>覆核 Agent</Ui>，選 Claude、Gemini 或 Bedrock 時出現（ChatGPT 不支援）。
           </li>
           <li>
             按 <Ui>請 Agent 準備覆核</Ui>：自動查證 High 與信心較低的差異。
@@ -411,7 +410,7 @@ export const HELP_SECTIONS: HelpSection[] = [
           ],
           [
             '選了 Bedrock 為什麼 AI 功能沒有作用？',
-            '後端尚未串接 AWS，Bedrock 目前只放在選單／成本試算供比較，選了等同未貼金鑰。',
+            '確認三件事：已選區域（Region）、金鑰是同一個區域產生的、所選模型已在 AWS 主控台開通。Bedrock 也不支援批次語意分析。',
           ],
         ].map(([q, a]) => (
           <div key={q} className="rounded-lg border border-line bg-surface px-3 py-2.5">

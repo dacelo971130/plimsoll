@@ -80,6 +80,15 @@ def test_demo_upload_creates_a_session_with_events_matching_differences(cleanup_
     # W2: v1.1 has one more page than v1.0 (a whole new closing section).
     assert len(pages["old"]) == 6 and len(pages["new"]) == 7
 
+    # page_alignment (CenterStage.tsx's page-by-page navigator, not just
+    # compare_documents()'s own diff list): every old/new page appears
+    # exactly once across the alignment, in ascending page-number order, and
+    # every entry has at least one side set.
+    alignment = pages["page_alignment"]
+    assert [e["old_pdf_page"] for e in alignment if e["old_pdf_page"] is not None] == list(range(1, 7))
+    assert [e["new_pdf_page"] for e in alignment if e["new_pdf_page"] is not None] == list(range(1, 8))
+    assert all(e["old_pdf_page"] is not None or e["new_pdf_page"] is not None for e in alignment)
+
 
 def test_missing_version_returns_needs_info_without_creating_a_session():
     before = set(p.name for p in SESSIONS_ROOT.iterdir()) if SESSIONS_ROOT.exists() else set()
@@ -227,6 +236,16 @@ def test_diagram_page_produces_a_drawing_difference_end_to_end(cleanup_sessions,
 
     # non-drawing differences keep the "text" discriminator (back-compat)
     assert all(d["kind"] == "text" for d in session["differences"] if d["id"] != drawing["id"])
+
+    # page_alignment covers the diagram page too, merged in by position
+    # (build_drawing_differences' own pairing rule) alongside the text page's
+    # own alignment — not silently dropped just because it has no text.
+    session_dir = SESSIONS_ROOT / session["session_id"]
+    pages = json.loads((session_dir / "pages.json").read_text(encoding="utf-8"))
+    assert pages["page_alignment"] == [
+        {"old_pdf_page": 1, "new_pdf_page": 1},
+        {"old_pdf_page": 2, "new_pdf_page": 2},
+    ]
 
 
 def test_preview_semantic_suggestions_enriches_and_appends_a_provenance_event(cleanup_sessions, monkeypatch):

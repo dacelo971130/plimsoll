@@ -1,0 +1,14 @@
+{
+  "tool": "abbyy",
+  "display_name": "ABBYY FineReader PDF — Compare Documents",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "開 Compare Documents → 載入舊／新 PDF → 設文件語言 → 比較 → 存成 Word 差異表格",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "本機執行",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

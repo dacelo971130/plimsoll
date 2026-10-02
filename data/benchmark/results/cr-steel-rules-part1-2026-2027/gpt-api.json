@@ -1,0 +1,14 @@
+{
+  "tool": "gpt-api",
+  "display_name": "GPT-6 Astra（API 基準線）",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "python3 scripts/llm_baseline.py（輸入＝PDF 文字層逐頁，effort=high）",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "以 API 傳送文字到 OpenAI",
+  "risk_mapping": "依固定提示詞自行分級",
+  "notes": ""
+}

@@ -1,0 +1,14 @@
+{
+  "tool": "google-docs",
+  "display_name": "Google 文件 — 比較文件",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "兩份 PDF 上傳雲端硬碟 → 以 Google 文件開啟 → 工具 → 比較文件",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "Google 雲端",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

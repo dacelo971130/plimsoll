@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Layers } from 'lucide-react';
 import { getSemanticBatch, submitSemanticBatch } from '../../lib/api';
+import { useRequestedLlmProvider } from '../../state/useRequestedLlmProvider';
 
 const POLL_INTERVAL_MS = 5000;
 
@@ -24,6 +25,9 @@ export function BatchAnalysisBar({ chainId }: BatchAnalysisBarProps) {
   const [appliedCount, setAppliedCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Bedrock has no Message Batches (the backend answers 409) — say so up
+  // front instead of letting the click fail.
+  const noBatch = useRequestedLlmProvider() === 'bedrock';
 
   useEffect(() => {
     return () => {
@@ -80,12 +84,13 @@ export function BatchAnalysisBar({ chainId }: BatchAnalysisBarProps) {
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={status === 'submitting' || status === 'polling'}
+          disabled={noBatch || status === 'submitting' || status === 'polling'}
           className="ml-auto rounded-md border border-line px-2.5 py-1 text-ink-700 hover:bg-accent-soft disabled:opacity-50"
         >
           {status === 'submitting' ? '提交中…' : status === 'polling' ? '分析中…' : '對整條鏈執行批次分析'}
         </button>
       </div>
+      {noBatch && <p className="mt-1 text-ink-500">Bedrock 不支援批次語意分析；可以在各次比對裡用「AI 語意分析」逐次分析。</p>}
       {status === 'unavailable' && <p className="mt-1 text-ink-400">未設定 AI 金鑰，此功能未啟用。</p>}
       {status === 'polling' && batchId && (
         <p className="mt-1 text-ink-500">

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { LLM_PROVIDER_OPTIONS, NO_LLM_LABEL, apiKeyStorageKey } from '../../lib/llmProviders';
+import { BEDROCK_REGIONS, LLM_PROVIDER_OPTIONS, NO_LLM_LABEL, apiKeyStorageKey, notifyLlmSettingsChanged } from '../../lib/llmProviders';
 import type { Settings } from '../../state/useSettings';
 import type { AnalysisMode } from '../../types';
 
@@ -13,14 +13,15 @@ function formatUsd(perM: number): string {
   return `$${perM.toFixed(2)}`;
 }
 
-// The backend's ACTUAL model per working provider (backend/services/llm/
+// The backend's ACTUAL model per provider (backend/services/llm/
 // {anthropic,gemini,openai}_provider.py's `MODEL_ID`) — fixed, and NOT
 // affected by the `模型` dropdown below (see its own note). Kept separate
 // from `settings.llmModel` so the status pill never claims a model is
-// running requests when it isn't.
+// running requests when it isn't. Bedrock has no entry: there the dropdown's
+// model IS the one called.
 const BACKEND_MODEL_ID_BY_PROVIDER: Record<string, string> = {
   anthropic: 'claude-opus-5',
-  gemini: 'gemini-2.5-flash',
+  gemini: 'gemini-3.8-flash',
   openai: 'gpt-4o',
 };
 
@@ -29,12 +30,10 @@ interface AiModelTabProps {
   update: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
 }
 
-// P5 — Claude/Gemini/ChatGPT are REAL, working providers (backend/services/
-// llm/{anthropic,gemini,openai}_provider.py). Bedrock (P6) is listed too, but
-// only for its model catalog/pricing — the backend has no Bedrock adapter,
-// so selecting it behaves exactly like leaving no key pasted (see `isBedrock`
-// below and llmProviders.ts's module docstring). The key you paste for a
-// working provider is sent ONLY as the `X-Llm-Api-Key` header on requests you
+// P5 — Claude/Gemini/ChatGPT/Bedrock are all REAL, working providers
+// (backend/services/llm/*_provider.py). Bedrock additionally needs a region,
+// and its model dropdown chooses the model actually called (Claude or Amazon
+// Nova). The key you paste is sent ONLY as the `X-Llm-Api-Key` header on requests you
 // make (never logged, never written to localStorage/code/VCS — see
 // frontend/src/lib/llmProviders.ts's llmHeaders()); the backend constructs
 // a provider instance for that one request and never persists it.
@@ -75,15 +74,15 @@ export function AiModelTab({ settings, update }: AiModelTabProps) {
     } else {
       sessionStorage.removeItem(apiKeyStorageKey(provider));
     }
+    notifyLlmSettingsChanged();
   }
 
   const usesLlm = selectedOption != null;
   const selectedModel = models.find((m) => m.id === settings.llmModel) ?? models[0];
-  // Bedrock is listed for its models/pricing only — not one of the backend's
-  // `_REQUEST_SCOPED_PROVIDERS` (see llmProviders.ts). Selecting it is never
-  // an error, but it's also never "enabled" the way the other three are.
   const isBedrock = selectedOption?.id === 'bedrock';
-  const enabled = usesLlm && !isBedrock && apiKey.trim().length > 0;
+  const hasKey = apiKey.trim().length > 0;
+  const enabled = usesLlm && hasKey && (!isBedrock || settings.bedrockRegion !== '');
+  const runningModel = isBedrock ? selectedModel?.label : BACKEND_MODEL_ID_BY_PROVIDER[selectedOption?.id ?? ''];
 
   return (
     <div className="space-y-5">
@@ -120,9 +119,31 @@ export function AiModelTab({ settings, update }: AiModelTabProps) {
           </select>
           {selectedModel && (
             <p className="mt-1 text-[11.5px] text-ink-500">
-              每 100 萬 tokens：輸入 {formatUsd(selectedModel.inputPerM)}・輸出 {formatUsd(selectedModel.outputPerM)}（官方牌價，實際費用以供應商帳單為準）。此選單用於模型與成本比較，本機比對實際呼叫的模型固定由伺服器設定，不受此選擇影響。
+              每 100 萬 tokens：輸入 {formatUsd(selectedModel.inputPerM)}・輸出 {formatUsd(selectedModel.outputPerM)}（官方牌價，實際費用以供應商帳單為準）。
+              {isBedrock
+                ? 'Bedrock 會實際呼叫這裡選的模型（需先在 AWS 主控台開通該模型）。'
+                : '此選單用於模型與成本比較，本機比對實際呼叫的模型固定由伺服器設定，不受此選擇影響。'}
             </p>
           )}
+        </section>
+      )}
+
+      {isBedrock && (
+        <section>
+          <div className="mb-1.5 text-[12.5px] font-medium text-ink-700">區域（Region）</div>
+          <select
+            value={settings.bedrockRegion}
+            onChange={(e) => update('bedrockRegion', e.target.value)}
+            className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-800"
+          >
+            <option value="">請選擇區域</option>
+            {BEDROCK_REGIONS.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 text-[11.5px] text-ink-500">短期金鑰綁定產生它的區域，請選同一個。台北區域沒有 Bedrock 上的 Claude，所以不在清單裡。</p>
         </section>
       )}
 
@@ -133,7 +154,7 @@ export function AiModelTab({ settings, update }: AiModelTabProps) {
             type="password"
             value={apiKey}
             onChange={(e) => handleKeyChange(e.target.value)}
-            placeholder="貼上金鑰"
+            placeholder={isBedrock ? '貼上 Bedrock API 金鑰（bearer token）' : '貼上金鑰'}
             className="w-full rounded-md border border-line bg-surface px-2.5 py-1.5 text-[12.5px] text-ink-800"
           />
           <p className="mt-1 text-[11.5px] text-ink-500">Key 只存瀏覽器工作階段（sessionStorage），只會隨此瀏覽器發出的請求以標頭送到本機後端，不寫入原始碼或版控。</p>
@@ -145,10 +166,10 @@ export function AiModelTab({ settings, update }: AiModelTabProps) {
       }`}
       >
         <span className={`h-2 w-2 rounded-full ${enabled ? 'bg-low-500' : 'bg-ink-400'}`} />
-        {isBedrock
-          ? 'Bedrock 目前僅提供模型與成本比較，尚未串接為可用的分析引擎（AI 功能維持停用，比對本身不受影響）'
-          : enabled
-            ? `已啟用 ${provider} LLM 模式（${BACKEND_MODEL_ID_BY_PROVIDER[selectedOption!.id]}）`
+        {enabled
+          ? `已啟用 ${provider} LLM 模式（${runningModel}）`
+          : isBedrock && hasKey
+            ? '請選擇 Bedrock 區域後才會啟用'
             : '未設定，使用本機精準規則引擎'}
       </div>
 
@@ -180,8 +201,8 @@ export function AiModelTab({ settings, update }: AiModelTabProps) {
       <section>
         <div className="mb-1.5 text-[12.5px] font-medium text-ink-700">關於這幾個選項</div>
         <p className="text-[11.5px] text-ink-500">
-          Claude、Gemini、ChatGPT 都是真的接上（結構化輸出＋圖片辨識＋批次 API），差異僅在模型與費率；沒有貼金鑰時，AI 相關功能一律停用，比對本身完全不受影響。Bedrock
-          目前只用於上方的模型與成本比較，選擇它等同未貼金鑰。
+          四個選項都是真的接上，差異在模型與費率；沒有貼金鑰時，AI 相關功能一律停用，比對本身完全不受影響。Bedrock 可用上方選的 Claude 或 Amazon Nova，但不支援批次語意分析；覆核
+          Agent 支援 Claude、Gemini 與 Bedrock，不支援 ChatGPT。
         </p>
       </section>
     </div>

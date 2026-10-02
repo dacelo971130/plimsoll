@@ -1,0 +1,14 @@
+{
+  "tool": "pdf24",
+  "display_name": "PDF24 Tools — 比較 PDF",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "tools.pdf24.org/en/compare-pdf → 載入兩份 PDF → 文字比對 → 逐筆切換並抄錄",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "官方稱在瀏覽器內比對、不上傳；伺服器上的檔案一小時後刪除",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

@@ -1,0 +1,14 @@
+{
+  "tool": "diffchecker",
+  "display_name": "Diffchecker — PDF Compare",
+  "kind": "competitor",
+  "tool_version": "說明 → 關於 裡的版本號",
+  "run_date": "YYYY-MM-DD",
+  "run_by": "執行人",
+  "settings": "diffchecker.com/pdf-compare → 載入兩份 PDF → Plain Text 或 Rich Text 檢視 → 匯出後抄錄",
+  "runtime_seconds": null,
+  "cost_note": "授權費或 API 花費",
+  "data_handling": "官方稱網頁版 PDF 比對在瀏覽器內處理；Desktop 完全離線",
+  "risk_mapping": "不分級",
+  "notes": ""
+}

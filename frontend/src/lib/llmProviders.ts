@@ -4,13 +4,13 @@
 // request). `llmHeaders()` below is generic over whatever's in this list —
 // adding a provider here is enough to make its BYOK key flow to the backend.
 //
-// Bedrock is listed here (models + prices, P6 成本試算) purely for the
-// Settings-page model picker and cost comparison — it is NOT one of
-// backend/services/llm/provider.py's `_REQUEST_SCOPED_PROVIDERS`. Selecting
-// it and pasting a key still resolves to "unavailable" server-side exactly
-// like an unset key would (provider.py's deliberate design: never crash,
-// never silently fall through to a DIFFERENT provider the user didn't ask
-// for). Groq stays absent entirely — no models/pricing anyone asked to see.
+// Bedrock is the one provider whose model choice reaches the backend: a
+// Bedrock API key fronts both Claude and Amazon Nova in many AWS regions, so
+// the key alone doesn't say where to send a request or to which model —
+// `llmHeaders()` adds X-Llm-Region / X-Llm-Model for it
+// (backend/services/llm/credentials.py). For the other providers the model
+// dropdown stays a cost-comparison aid; the backend's model is fixed.
+// Groq stays absent entirely — no models/pricing anyone asked to see.
 //
 // Prices are USD per 1,000,000 tokens, standard/on-demand tier, checked
 // against each vendor's own pricing page on 2026-09-28 (see helpContent.tsx's
@@ -67,21 +67,18 @@ export const LLM_PROVIDER_OPTIONS: LlmProviderOption[] = [
   {
     id: 'bedrock',
     label: 'Bedrock（AWS）',
+    // Real Bedrock model ids — sent as X-Llm-Model. Nova 2 Lite is offered
+    // through cross-region inference profiles only, hence `global.`. Nova 2
+    // Pro is left out: still Preview, Nova Forge customers only, and AWS
+    // publishes no model id for it.
     models: [
-      { id: 'amazon.nova-2-lite', label: 'Amazon Nova 2 Lite', tier: '輕量', inputPerM: 0.3, outputPerM: 2.5 },
+      { id: 'global.amazon.nova-2-lite-v1:0', label: 'Amazon Nova 2 Lite', tier: '輕量', inputPerM: 0.3, outputPerM: 2.5 },
       {
         id: 'anthropic.claude-haiku-4-5',
         label: 'Claude Haiku 4.5（Bedrock）',
         tier: '輕量',
         inputPerM: 1.0,
         outputPerM: 5.0,
-      },
-      {
-        id: 'amazon.nova-2-pro',
-        label: 'Amazon Nova 2 Pro（Preview）',
-        tier: '中階',
-        inputPerM: 1.25,
-        outputPerM: 10.0,
       },
       {
         id: 'anthropic.claude-sonnet-5',
@@ -101,6 +98,27 @@ export const ALL_LLM_MODELS: (LlmModelOption & { providerId: LlmProviderId; prov
 
 export const NO_LLM_LABEL = '不使用 LLM（本機規則引擎）';
 
+// Regions with both Bedrock endpoints this app uses: Claude (bedrock-mantle)
+// and Nova 2 Lite (global inference profile). Taipei isn't one — Claude on
+// Bedrock isn't served there.
+export const BEDROCK_REGIONS: { id: string; label: string }[] = [
+  { id: 'ap-northeast-1', label: '東京（ap-northeast-1）' },
+  { id: 'ap-southeast-1', label: '新加坡（ap-southeast-1）' },
+  { id: 'ap-southeast-2', label: '雪梨（ap-southeast-2）' },
+  { id: 'us-east-1', label: '美國東部・維吉尼亞（us-east-1）' },
+  { id: 'us-west-2', label: '美國西部・奧勒岡（us-west-2）' },
+  { id: 'eu-central-1', label: '法蘭克福（eu-central-1）' },
+  { id: 'eu-west-1', label: '愛爾蘭（eu-west-1）' },
+];
+
+/** Fired whenever the provider, model, region or pasted key changes, so
+ * anything that asked the backend "is AI available?" can ask again. */
+export const LLM_SETTINGS_EVENT = 'plimsoll:llm-settings-changed';
+
+export function notifyLlmSettingsChanged(): void {
+  window.dispatchEvent(new Event(LLM_SETTINGS_EVENT));
+}
+
 const SETTINGS_KEY = 'plimsoll.settings.v1';
 const SESSION_KEY_PREFIX = 'plimsoll.apiKey.'; // sessionStorage only — never localStorage/code/VCS, see AiModelTab.tsx
 
@@ -108,17 +126,32 @@ export function apiKeyStorageKey(providerLabel: string): string {
   return SESSION_KEY_PREFIX + providerLabel;
 }
 
-/** Reads the currently-selected provider label out of useSettings'
- * localStorage blob directly — api.ts is a plain module with no React
- * state, so this avoids threading `settings` through every call site. */
-function currentProviderLabel(): string | null {
+interface StoredLlmSettings {
+  llmProvider?: string;
+  llmModel?: string;
+  bedrockRegion?: string;
+}
+
+/** Reads the LLM fields out of useSettings' localStorage blob directly —
+ * api.ts is a plain module with no React state, so this avoids threading
+ * `settings` through every call site. */
+function storedLlmSettings(): StoredLlmSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (!raw) return null;
-    return (JSON.parse(raw) as { llmProvider?: string }).llmProvider ?? null;
+    return raw ? (JSON.parse(raw) as StoredLlmSettings) : {};
   } catch {
-    return null;
+    return {};
   }
+}
+
+/** The provider this browser's AI requests will name — the selected one,
+ * once a key is pasted for it. null means the backend decides from its own
+ * server-side keys. */
+export function requestedProviderId(): LlmProviderId | null {
+  const stored = storedLlmSettings();
+  const option = LLM_PROVIDER_OPTIONS.find((o) => o.label === stored.llmProvider);
+  if (!option || !sessionStorage.getItem(apiKeyStorageKey(option.label))) return null;
+  return option.id;
 }
 
 /** Headers to attach to any AI-touching fetch — empty object when "不使用
@@ -126,11 +159,17 @@ function currentProviderLabel(): string | null {
  * (falls back to the backend's server-env-var behavior either way, see
  * resolve_llm_provider()'s "both None" branch). */
 export function llmHeaders(): HeadersInit {
-  const label = currentProviderLabel();
+  const stored = storedLlmSettings();
+  const label = stored.llmProvider;
   if (!label || label === NO_LLM_LABEL) return {};
   const option = LLM_PROVIDER_OPTIONS.find((o) => o.label === label);
   if (!option) return {};
   const apiKey = sessionStorage.getItem(apiKeyStorageKey(label));
   if (!apiKey) return {};
-  return { 'X-Llm-Provider': option.id, 'X-Llm-Api-Key': apiKey };
+  const headers: Record<string, string> = { 'X-Llm-Provider': option.id, 'X-Llm-Api-Key': apiKey };
+  if (option.id === 'bedrock') {
+    if (stored.bedrockRegion) headers['X-Llm-Region'] = stored.bedrockRegion;
+    if (stored.llmModel) headers['X-Llm-Model'] = stored.llmModel;
+  }
+  return headers;
 }

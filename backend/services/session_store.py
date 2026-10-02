@@ -26,7 +26,7 @@ from pathlib import Path
 from backend.config import SESSIONS_ROOT
 from backend.models.config_models import Ruleset
 from backend.services import export as export_service
-from backend.services.comparison import DifferenceRecord, compare_documents
+from backend.services.comparison import DifferenceRecord, align_pages, compare_documents
 from backend.services.drawing_diff import DrawingDifferenceRecord, build_drawing_differences
 from backend.services.extraction import (
     ExtractedDocument,
@@ -35,6 +35,7 @@ from backend.services.extraction import (
     extract_metadata,
     scanned_page_numbers,
 )
+from backend.services.llm.credentials import LlmCredentials
 from backend.services.normalize import apply_term_aliases
 from backend.services.ocr.pipeline import ocr_scanned_pages
 from backend.storage import events as event_store
@@ -221,8 +222,7 @@ def process_upload(
     new_date_override: str | None = None,
     ruleset_version: str | None = None,
     analysis_mode: str = "rules_first",
-    llm_provider_id: str | None = None,
-    llm_api_key: str | None = None,
+    llm: LlmCredentials | None = None,
 ) -> dict:
     """Single entry point for both the "just dropped two files" inspection
     step and the "user filled in the missing version, go" creation step —
@@ -234,9 +234,9 @@ def process_upload(
     deterministic rule-engine result in `differences`, only how widely
     `preview_semantic_suggestions()` later casts its net.
 
-    `llm_provider_id`/`llm_api_key` (P5 multi-provider BYOK) select which AI
-    backend does OCR + drawing-region description for THIS upload — see
-    resolve_ocr_provider()/resolve_llm_provider(). Both None falls back to
+    `llm` (P5 multi-provider BYOK) selects which AI backend does OCR +
+    drawing-region description for THIS upload — see
+    resolve_ocr_provider()/resolve_llm_provider(). None falls back to
     whatever server-side env var is configured, same as before this existed."""
     if analysis_mode not in ("rules_first", "model_heavy", "model_only"):
         raise ValueError(f"unknown analysis_mode: {analysis_mode!r}")
@@ -251,7 +251,7 @@ def process_upload(
     # monkeypatch backend.services.ocr.provider.resolve_ocr_provider.
     from backend.services.ocr.provider import resolve_ocr_provider
 
-    ocr_provider = resolve_ocr_provider(llm_provider_id, llm_api_key)
+    ocr_provider = resolve_ocr_provider(llm)
     if ocr_provider is not None:
         old_doc = ocr_scanned_pages(old_bytes, old_doc, ocr_provider)
         new_doc = ocr_scanned_pages(new_bytes, new_doc, ocr_provider)
@@ -306,7 +306,8 @@ def process_upload(
     new_text_doc = ExtractedDocument(
         pages=new_text_pages, page_count=len(new_text_pages), size_bytes=new_doc.size_bytes
     )
-    differences = compare_documents(old_text_doc, new_text_doc, ruleset)
+    text_page_pairs = align_pages(old_text_doc, new_text_doc)
+    differences = compare_documents(old_text_doc, new_text_doc, ruleset, page_pairs=text_page_pairs)
 
     # LLM description of drawing regions is opt-in (resolve_llm_provider(),
     # same gate as the rest of W7) — the pixel-diff regions themselves are
@@ -321,7 +322,7 @@ def process_upload(
             old_diagram_pages,
             new_diagram_pages,
             start_id=len(differences),
-            provider=resolve_llm_provider(llm_provider_id, llm_api_key),
+            provider=resolve_llm_provider(llm),
         )
 
     session_id = _new_session_id()
@@ -356,6 +357,44 @@ def process_upload(
         json.dumps(difference_dicts, ensure_ascii=False, indent=2), encoding="utf-8"
     )
 
+    # W3 page alignment, exposed for the source viewer's page-by-page
+    # navigation (CenterStage.tsx) — NOT just for compare_documents(). Without
+    # this, the viewer independently indexed `pages.old`/`pages.new` by raw
+    # `pdf_page` number (舊版第 N 頁 next to 新版第 N 頁), silently assuming the
+    # two documents keep step page-for-page. That assumption is exactly what
+    # W3 alignment exists to drop for the diff LIST — real documents with any
+    # front-matter/page-count drift (SOLAS 2004→2020 inserts ~22 pages before
+    # the same content starts) make "page N of old" and "page N of new"
+    # unrelated pages that only coincidentally share a page number, so the
+    # viewer was showing two unrelated pages side by side and the leftover
+    # highlighting from whichever page's OWN difference records happened to
+    # reference that raw page number made it look like content was
+    # incorrectly flagged as changed.
+    #
+    # text_page_pairs indexes into old_text_pages/new_text_pages (the
+    # `page_kind != "diagram"` subset compare_documents() itself uses — see
+    # above); diagram pages are excluded from that alignment, so they're
+    # merged back in here using the SAME positional pairing
+    # build_drawing_differences() already assumes (engineering drawings
+    # overwhelmingly keep their position across versions), then the whole
+    # list is sorted into document order by whichever side has a page number
+    # (an entry always has at least one side set).
+    page_alignment = [
+        {
+            "old_pdf_page": old_text_pages[oi].pdf_page if oi is not None else None,
+            "new_pdf_page": new_text_pages[ni].pdf_page if ni is not None else None,
+        }
+        for oi, ni in text_page_pairs
+    ]
+    for i in range(max(len(old_diagram_pages), len(new_diagram_pages))):
+        page_alignment.append(
+            {
+                "old_pdf_page": old_diagram_pages[i].pdf_page if i < len(old_diagram_pages) else None,
+                "new_pdf_page": new_diagram_pages[i].pdf_page if i < len(new_diagram_pages) else None,
+            }
+        )
+    page_alignment.sort(key=lambda e: e["old_pdf_page"] if e["old_pdf_page"] is not None else e["new_pdf_page"])
+
     pages_json = {
         "old": [
             {"pdf_page": p.pdf_page, "print_label": p.print_label, "label_source": p.label_source, "text": p.raw_text}
@@ -365,6 +404,7 @@ def process_upload(
             {"pdf_page": p.pdf_page, "print_label": p.print_label, "label_source": p.label_source, "text": p.raw_text}
             for p in new_doc.pages
         ],
+        "page_alignment": page_alignment,
     }
     (session_dir / "pages.json").write_text(json.dumps(pages_json, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -404,7 +444,7 @@ def process_upload(
 
 
 def preview_semantic_suggestions(
-    session_id: str, *, llm_provider_id: str | None = None, llm_api_key: str | None = None
+    session_id: str, *, llm: LlmCredentials | None = None
 ) -> dict | None:
     """W7a, on-demand: never called by process_upload(). `differences.json`
     is written-once (see module docstring), so this returns an ENRICHED COPY
@@ -416,9 +456,8 @@ def preview_semantic_suggestions(
 
     Returns None if the session doesn't exist. `semantic_layer_available` is
     False (differences unchanged) whenever `resolve_llm_provider()` returns
-    None — no API key configured (server-side or via the P5 BYOK
-    `llm_provider_id`/`llm_api_key` pair) is a normal, complete state, not a
-    degraded one."""
+    None — no API key configured (server-side or via the P5 BYOK `llm`
+    credentials) is a normal, complete state, not a degraded one."""
     from backend.services.llm.provider import resolve_llm_provider
     from backend.services.llm.residual import enrich_session_differences
 
@@ -426,7 +465,7 @@ def preview_semantic_suggestions(
     if session is None:
         return None
 
-    provider = resolve_llm_provider(llm_provider_id, llm_api_key)
+    provider = resolve_llm_provider(llm)
     if provider is None:
         return {"semantic_layer_available": False, "differences": session["differences"]}
 
@@ -453,7 +492,7 @@ def preview_semantic_suggestions(
 
 
 def suggest_aliases_for_session(
-    session_id: str, *, llm_provider_id: str | None = None, llm_api_key: str | None = None
+    session_id: str, *, llm: LlmCredentials | None = None
 ) -> dict | None:
     """P5 term_aliases 核准流程, step 1: runs the same semantic-preview
     enrichment as `preview_semantic_suggestions()`, then scans the enriched
@@ -468,13 +507,13 @@ def suggest_aliases_for_session(
     from backend.services.llm.provider import resolve_llm_provider
     from backend.storage.config_loader import append_pending_alias
 
-    preview = preview_semantic_suggestions(session_id, llm_provider_id=llm_provider_id, llm_api_key=llm_api_key)
+    preview = preview_semantic_suggestions(session_id, llm=llm)
     if preview is None:
         return None
     if not preview["semantic_layer_available"]:
         return {"semantic_layer_available": False, "candidates": []}
 
-    provider = resolve_llm_provider(llm_provider_id, llm_api_key)
+    provider = resolve_llm_provider(llm)
     candidates = suggest_term_aliases(preview["differences"], provider)
     stored = [
         append_pending_alias(

@@ -6,7 +6,7 @@ from __future__ import annotations
 import pytest
 
 from backend.config import REPO_ROOT
-from backend.services.comparison import _cosine, _page_vectors, classify, compare_documents
+from backend.services.comparison import classify, compare_documents
 from backend.services.extraction import ExtractedDocument, PageContent, extract_document
 from backend.storage.config_loader import get_ruleset
 
@@ -357,78 +357,9 @@ def test_identical_pages_are_short_circuited(ruleset):
     assert not any((d.old and d.old.page.pdf_page in (1, 2)) or (d.new and d.new.page.pdf_page in (1, 2)) for d in differences)
 
 
-# --- W3 page-matching signal: TF-IDF bigram cosine (_page_vectors/_cosine) ---
-# docs/redesign/plimsoll-real-document-smoketest-2026-09.html §7 conflict 1,
-# option 丙 — replaces the old 6-line character-prefix fingerprint.
-
-
-def test_identical_page_text_scores_close_to_one():
-    page = _mk_page(1, ["1. 標題", "第一段內容維持不變的說明文字，內容足夠長以產生穩定的 bigram 集合。"], heading="1. 標題")
-    [vec_a, vec_b] = _page_vectors([page, page])
-    assert _cosine(vec_a, vec_b) > 0.99
-
-
-def test_unrelated_pages_score_near_zero():
-    old_page = _mk_page(1, ["1. 標題", "第一段內容維持不變的說明文字，內容足夠長以產生穩定的 bigram 集合。"], heading="1. 標題")
-    new_page = _mk_page(1, ["9. 完全不同主題", "This entire page discusses an unrelated aircraft maintenance schedule instead."], heading="9. 完全不同主題")
-    [vec_a, vec_b] = _page_vectors([old_page, new_page])
-    assert _cosine(vec_a, vec_b) < 0.2
-
-
-def test_list_to_prose_rewrite_scores_higher_than_the_old_fingerprint_would():
-    # Shape of the real SOLAS p101/p57 case: same regulation, same vocabulary,
-    # rewritten from a bulleted list into prose so the wording that would have
-    # anchored a fixed-length line-prefix comparison moves down the page.
-    old_page = _mk_page(
-        1,
-        [
-            "4.4.2 緊急照明配電盤",
-            "位置：機艙控制室",
-            "電源：緊急發電機",
-            "測試週期：每月",
-        ],
-        heading="4.4.2 緊急照明配電盤",
-    )
-    new_page = _mk_page(
-        1,
-        [
-            "生效日期：2020 年新增修訂",
-            "4.4.2 緊急照明配電盤應設置於機艙控制室內，由緊急發電機供電，並應每月測試一次其功能是否正常。",
-        ],
-        heading="生效日期：2020 年新增修訂",
-    )
-    [old_vec, new_vec] = _page_vectors([old_page, new_page])
-    rewritten_score = _cosine(old_vec, new_vec)
-
-    unrelated_page = _mk_page(1, ["9. 完全不同主題", "與上述規定完全無關的另一段落內容。"], heading="9. 完全不同主題")
-    [_, unrelated_vec] = _page_vectors([old_page, unrelated_page])
-    unrelated_score = _cosine(old_vec, unrelated_vec)
-
-    # The real threshold calibration happens against actual documents (see the
-    # plan's step 3/4) — this synthetic case only needs to show the rewritten
-    # pair is clearly closer than an unrelated pair, not hit a specific number.
-    assert rewritten_score > unrelated_score + 0.2
-
-
-def test_two_blank_pages_never_score_as_identical():
-    # Same invariant as compare_documents' own scanned-page test, but at the
-    # vector/cosine layer directly: an empty page has an empty vector, and
-    # two empty vectors must never be treated as "perfectly similar".
-    blank_a = _mk_page(1, [], is_scanned=True)
-    blank_b = _mk_page(1, [], is_scanned=True)
-    [vec_a, vec_b] = _page_vectors([blank_a, blank_b])
-    assert vec_a == {} and vec_b == {}
-    assert _cosine(vec_a, vec_b) == 0.0
-
-
-def test_very_short_pages_do_not_crash_or_give_nonsensical_scores():
-    # A single short line yields zero or one bigram — must not raise, and
-    # must not spuriously score 1.0 against an unrelated short page.
-    tiny_a = _mk_page(1, ["1. 標題"], heading="1. 標題")
-    tiny_b = _mk_page(1, ["2. 次頁"], heading="2. 次頁")
-    single_token = _mk_page(1, ["A"])
-    [vec_a, vec_b, vec_single] = _page_vectors([tiny_a, tiny_b, single_token])
-    for vec in (vec_a, vec_b, vec_single):
-        assert isinstance(_cosine(vec, vec_a), float)
-    assert 0.0 <= _cosine(vec_a, vec_b) <= 1.0
-    assert vec_single == {}  # "A" alone has no adjacent-token pair to form a bigram
+# W3 page-matching signal (TF-IDF bigram cosine) unit tests moved to
+# backend/tests/test_text_similarity.py once the logic was generalized from
+# PageContent objects to plain strings (backend/services/text_similarity.py)
+# for reuse by backend/services/agent/tools.py's search tools. _align_pages'
+# own page-alignment behavior (tested below via compare_documents) is
+# unaffected by that move.
